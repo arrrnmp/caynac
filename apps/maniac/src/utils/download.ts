@@ -38,6 +38,11 @@ type DownloadWorkerMessage =
   | DownloadWorkerDoneMessage
   | DownloadWorkerErrorMessage;
 
+function isEntryPointModuleNotFound(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return message.includes('ModuleNotFound') && message.includes('(entry point)');
+}
+
 function resolveWorkerUrl(): URL {
   const jsUrl = new URL('../workers/download.worker.js', import.meta.url);
   if (fs.existsSync(fileURLToPath(jsUrl))) return jsUrl;
@@ -51,18 +56,55 @@ export function downloadFile(
   onProgress: (p: DownloadProgress) => void,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
-    const worker = new Worker(resolveWorkerUrl(), {
-      workerData: { url, destDir, filename } as DownloadWorkerPayload,
-    });
+    const workerCandidates: Array<URL | string> = [
+      resolveWorkerUrl(),
+      './apps/maniac/src/workers/download.worker.ts',
+    ];
+
+    let candidateIndex = 0;
+    let worker: Worker | undefined;
     let settled = false;
+
+    const startWorker = () => {
+      worker = new Worker(workerCandidates[candidateIndex]!, {
+        workerData: { url, destDir, filename } as DownloadWorkerPayload,
+      });
+      worker.on('message', handleMessage);
+      worker.on('error', handleError);
+      worker.on('exit', handleExit);
+    };
+
+    const switchToFallbackWorker = (reason: unknown): boolean => {
+      if (settled) return false;
+      if (!isEntryPointModuleNotFound(reason)) return false;
+      if (candidateIndex + 1 >= workerCandidates.length) return false;
+
+      if (worker) {
+        worker.off('message', handleMessage);
+        worker.off('error', handleError);
+        worker.off('exit', handleExit);
+        void worker.terminate().catch(() => {});
+      }
+
+      candidateIndex += 1;
+      try {
+        startWorker();
+      } catch (err) {
+        const normalized = err instanceof Error ? err : new Error(String(err));
+        settle(() => reject(normalized));
+      }
+      return true;
+    };
 
     const settle = (finalize: () => void) => {
       if (settled) return;
       settled = true;
-      worker.off('message', handleMessage);
-      worker.off('error', handleError);
-      worker.off('exit', handleExit);
-      void worker.terminate().catch(() => {});
+      if (worker) {
+        worker.off('message', handleMessage);
+        worker.off('error', handleError);
+        worker.off('exit', handleExit);
+        void worker.terminate().catch(() => {});
+      }
       finalize();
     };
 
@@ -83,6 +125,7 @@ export function downloadFile(
     };
 
     const handleError = (err: Error) => {
+      if (switchToFallbackWorker(err)) return;
       settle(() => reject(err));
     };
 
@@ -94,10 +137,13 @@ export function downloadFile(
       }
       settle(() => reject(new Error(`Download worker exited with code ${code}`)));
     };
-
-    worker.on('message', handleMessage);
-    worker.on('error', handleError);
-    worker.on('exit', handleExit);
+    try {
+      startWorker();
+    } catch (err) {
+      if (switchToFallbackWorker(err)) return;
+      const normalized = err instanceof Error ? err : new Error(String(err));
+      settle(() => reject(normalized));
+    }
   });
 }
 

@@ -42,6 +42,7 @@ export function compressFiles(
     '../workers/compression.worker',
     { type: 'compress', options: opts },
     (progress) => onProgress(progress.pct, progress.file),
+    './packages/shared/src/workers/compression.worker.ts',
   );
 }
 
@@ -57,6 +58,7 @@ export function extractFiles(
     '../workers/compression.worker',
     { type: 'extract', archive, outputDir, password, binaryPath },
     (progress) => onProgress(progress.pct, progress.file),
+    './packages/shared/src/workers/compression.worker.ts',
   );
 }
 

@@ -36,5 +36,6 @@ export function runPicocrypt(
     '../workers/picocrypt.worker',
     { options: opts },
     (progress) => onProgress(progress.pct),
+    './packages/shared/src/workers/picocrypt.worker.ts',
   );
 }

@@ -17,6 +17,11 @@ interface ErrorMessage {
   message: string;
 }
 
+function isEntryPointModuleNotFound(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return message.includes('ModuleNotFound') && message.includes('(entry point)');
+}
+
 function resolveWorkerUrl(moduleUrl: string, workerPathWithoutExt: string): URL {
   const jsUrl = new URL(`${workerPathWithoutExt}.js`, moduleUrl);
   if (fs.existsSync(fileURLToPath(jsUrl))) return jsUrl;
@@ -28,19 +33,54 @@ export function runWorkerTask<TPayload, TProgress, TResult>(
   workerPathWithoutExt: string,
   payload: TPayload,
   onProgress: (progress: TProgress) => void,
+  compiledWorkerEntry?: string,
 ): Promise<TResult> {
   return new Promise((resolve, reject) => {
-    const workerUrl = resolveWorkerUrl(moduleUrl, workerPathWithoutExt);
-    const worker = new Worker(workerUrl, { workerData: payload });
+    const workerCandidates: Array<URL | string> = [resolveWorkerUrl(moduleUrl, workerPathWithoutExt)];
+    if (compiledWorkerEntry) workerCandidates.push(compiledWorkerEntry);
+
+    let candidateIndex = 0;
+    let worker: Worker | undefined;
     let settled = false;
+
+    const startWorker = () => {
+      worker = new Worker(workerCandidates[candidateIndex]!, { workerData: payload });
+      worker.on('message', handleMessage);
+      worker.on('error', handleError);
+      worker.on('exit', handleExit);
+    };
+
+    const switchToFallbackWorker = (reason: unknown): boolean => {
+      if (settled) return false;
+      if (!isEntryPointModuleNotFound(reason)) return false;
+      if (candidateIndex + 1 >= workerCandidates.length) return false;
+
+      if (worker) {
+        worker.off('message', handleMessage);
+        worker.off('error', handleError);
+        worker.off('exit', handleExit);
+        void worker.terminate().catch(() => {});
+      }
+
+      candidateIndex += 1;
+      try {
+        startWorker();
+      } catch (err) {
+        const normalized = err instanceof Error ? err : new Error(String(err));
+        settle(() => reject(normalized));
+      }
+      return true;
+    };
 
     const settle = (finalize: () => void) => {
       if (settled) return;
       settled = true;
-      worker.off('message', handleMessage);
-      worker.off('error', handleError);
-      worker.off('exit', handleExit);
-      void worker.terminate().catch(() => {});
+      if (worker) {
+        worker.off('message', handleMessage);
+        worker.off('error', handleError);
+        worker.off('exit', handleExit);
+        void worker.terminate().catch(() => {});
+      }
       finalize();
     };
 
@@ -67,6 +107,7 @@ export function runWorkerTask<TPayload, TProgress, TResult>(
     };
 
     const handleError = (err: Error) => {
+      if (switchToFallbackWorker(err)) return;
       settle(() => reject(err));
     };
 
@@ -79,8 +120,12 @@ export function runWorkerTask<TPayload, TProgress, TResult>(
       settle(() => reject(new Error(`Worker exited with code ${code}`)));
     };
 
-    worker.on('message', handleMessage);
-    worker.on('error', handleError);
-    worker.on('exit', handleExit);
+    try {
+      startWorker();
+    } catch (err) {
+      if (switchToFallbackWorker(err)) return;
+      const normalized = err instanceof Error ? err : new Error(String(err));
+      settle(() => reject(normalized));
+    }
   });
 }
