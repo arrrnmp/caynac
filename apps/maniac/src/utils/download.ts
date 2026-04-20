@@ -18,12 +18,25 @@ export function downloadFile(
   onProgress: (p: DownloadProgress) => void,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
+    const PROGRESS_EMIT_MS = 150;
     fs.mkdirSync(destDir, { recursive: true });
     const dest = path.join(destDir, filename);
     const file = fs.createWriteStream(dest);
     const protocol = url.startsWith('https') ? https : http;
     const startTime = Date.now();
     let bytesReceived = 0;
+    let totalBytes = 0;
+    let lastProgressEmitAt = 0;
+
+    const emitProgress = (force = false) => {
+      const now = Date.now();
+      if (!force && now - lastProgressEmitAt < PROGRESS_EMIT_MS) return;
+      lastProgressEmitAt = now;
+      const elapsed = (now - startTime) / 1000;
+      const speed = elapsed > 0 ? bytesReceived / elapsed : 0;
+      const percentage = totalBytes > 0 ? (bytesReceived / totalBytes) * 100 : 0;
+      onProgress({ filename, bytesReceived, totalBytes, percentage, speed });
+    };
 
     const req = protocol.get(url, (res) => {
       if (res.statusCode === 301 || res.statusCode === 302) {
@@ -35,19 +48,17 @@ export function downloadFile(
         return;
       }
 
-      const totalBytes = parseInt(res.headers['content-length'] ?? '0', 10);
+      totalBytes = Number.parseInt(res.headers['content-length'] ?? '0', 10);
 
       res.on('data', (chunk: Buffer) => {
         bytesReceived += chunk.length;
-        const elapsed = (Date.now() - startTime) / 1000;
-        const speed = elapsed > 0 ? bytesReceived / elapsed : 0;
-        const percentage = totalBytes > 0 ? (bytesReceived / totalBytes) * 100 : 0;
-        onProgress({ filename, bytesReceived, totalBytes, percentage, speed });
+        emitProgress();
       });
 
       res.pipe(file);
 
       file.on('finish', () => {
+        emitProgress(true);
         file.close(() => resolve(dest));
       });
     });

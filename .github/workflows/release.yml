@@ -5,37 +5,120 @@ on:
     tags:
       - "v*"
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
+    name: Build ${{ matrix.artifact }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - artifact: maniac-darwin-arm64
+            entry: apps/maniac/src/cli.tsx
+            target: bun-darwin-arm64
+            output: maniac-darwin-arm64
+          - artifact: maniac-darwin-x64-baseline
+            entry: apps/maniac/src/cli.tsx
+            target: bun-darwin-x64-baseline
+            output: maniac-darwin-x64-baseline
+          - artifact: maniac-darwin-x64-modern
+            entry: apps/maniac/src/cli.tsx
+            target: bun-darwin-x64-modern
+            output: maniac-darwin-x64-modern
+          - artifact: maniac-windows-arm64
+            entry: apps/maniac/src/cli.tsx
+            target: bun-windows-arm64
+            output: maniac-windows-arm64.exe
+          - artifact: maniac-windows-x64-baseline
+            entry: apps/maniac/src/cli.tsx
+            target: bun-windows-x64-baseline
+            output: maniac-windows-x64-baseline.exe
+          - artifact: maniac-windows-x64-modern
+            entry: apps/maniac/src/cli.tsx
+            target: bun-windows-x64-modern
+            output: maniac-windows-x64-modern.exe
+          - artifact: caymann-darwin-arm64
+            entry: apps/caymann/src/cli.tsx
+            target: bun-darwin-arm64
+            output: caymann-darwin-arm64
+          - artifact: caymann-darwin-x64-baseline
+            entry: apps/caymann/src/cli.tsx
+            target: bun-darwin-x64-baseline
+            output: caymann-darwin-x64-baseline
+          - artifact: caymann-darwin-x64-modern
+            entry: apps/caymann/src/cli.tsx
+            target: bun-darwin-x64-modern
+            output: caymann-darwin-x64-modern
+          - artifact: caymann-windows-arm64
+            entry: apps/caymann/src/cli.tsx
+            target: bun-windows-arm64
+            output: caymann-windows-arm64.exe
+          - artifact: caymann-windows-x64-baseline
+            entry: apps/caymann/src/cli.tsx
+            target: bun-windows-x64-baseline
+            output: caymann-windows-x64-baseline.exe
+          - artifact: caymann-windows-x64-modern
+            entry: apps/caymann/src/cli.tsx
+            target: bun-windows-x64-modern
+            output: caymann-windows-x64-modern.exe
     steps:
       - uses: actions/checkout@v4
 
       - uses: oven-sh/setup-bun@v2
 
-      - run: bun install
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
 
-      - name: Compile maniac (macOS ARM64)
-        run: bun build --compile --target=bun-darwin-arm64 apps/maniac/src/cli.tsx --outfile dist/maniac-darwin-arm64
+      - name: Compile ${{ matrix.artifact }}
+        run: |
+          mkdir -p dist
+          bun build \
+            --compile \
+            --target=${{ matrix.target }} \
+            --format=esm \
+            --minify \
+            --sourcemap \
+            --bytecode \
+            --define BUILD_VERSION='"${{ github.ref_name }}"' \
+            --define BUILD_COMMIT='"${{ github.sha }}"' \
+            ${{ matrix.entry }} \
+            --outfile dist/${{ matrix.output }}
+          sha256sum dist/${{ matrix.output }} > dist/${{ matrix.output }}.sha256
 
-      - name: Compile maniac (Windows x64)
-        run: bun build --compile --target=bun-windows-x64 apps/maniac/src/cli.tsx --outfile dist/maniac-windows-x64.exe
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            dist/${{ matrix.output }}
+            dist/${{ matrix.output }}.sha256
+          compression-level: 0
 
-      - name: Compile caymann (macOS ARM64)
-        run: bun build --compile --target=bun-darwin-arm64 apps/caymann/src/cli.tsx --outfile dist/caymann-darwin-arm64
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: write
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
 
-      - name: Compile caymann (Windows x64)
-        run: bun build --compile --target=bun-windows-x64 apps/caymann/src/cli.tsx --outfile dist/caymann-windows-x64.exe
+      - name: List release assets
+        run: ls -la dist
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            dist/maniac-darwin-arm64
-            dist/maniac-windows-x64.exe
-            dist/caymann-darwin-arm64
-            dist/caymann-windows-x64.exe
+          files: dist/*
           generate_release_notes: true

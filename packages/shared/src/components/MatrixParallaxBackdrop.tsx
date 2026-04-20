@@ -4,6 +4,8 @@ import { useMouse } from '../hooks/useMouse.js';
 
 const BG = '#000000';
 const EXCITE_RADIUS = 14;
+const IS_WINDOWS = process.platform === 'win32';
+const MATRIX_TICK_MS = IS_WINDOWS ? 130 : 90;
 
 // Characters per layer — increasing richness toward the foreground
 const CHARS_BY_LAYER = [
@@ -107,7 +109,10 @@ function dormantDrop(col: number, layer: LayerIdx, spawnAt: number): Drop {
 function spawnDrop(drop: Drop, now: number): Drop {
   const cfg = LAYER_CFG[drop.layer];
   const chars = CHARS_BY_LAYER[drop.layer];
-  const trailLen = Math.floor(rand(cfg.trailMin, cfg.trailMax));
+  const trailLen = Math.max(
+    3,
+    Math.floor(rand(cfg.trailMin, cfg.trailMax) * (IS_WINDOWS ? 0.7 : 1)),
+  );
   return {
     ...drop,
     active: true,
@@ -124,7 +129,7 @@ function spawnDrop(drop: Drop, now: number): Drop {
 function initLayer(layer: LayerIdx, width: number, height: number, now: number): Drop[] {
   const cfg = LAYER_CFG[layer];
   const drops: Drop[] = [];
-  for (let col = cfg.colOffset; col < width; col += cfg.colStep) {
+  for (let col = cfg.colOffset; col < width; col += cfg.colStep * (IS_WINDOWS ? 2 : 1)) {
     const dormant = dormantDrop(col, layer, now + rand(200, 3500));
     if (Math.random() < 0.6) {
       // Pre-spawn with head scattered across the visible area so the matrix
@@ -169,7 +174,8 @@ function buildFrame(
 
   const mx = mouseActive ? mouseX : width / 2;
 
-  for (let l = 0 as LayerIdx; l < 3; l++) {
+  const layerCount = IS_WINDOWS ? 2 : 3;
+  for (let l = 0 as LayerIdx; l < layerCount; l++) {
     const layer = l as LayerIdx;
     const cfg = LAYER_CFG[layer];
 
@@ -290,7 +296,7 @@ export function MatrixParallaxBackdrop({ width, height, frozen = false }: Matrix
       }
 
       setTick((v) => v + 1);
-    }, 90);
+    }, MATRIX_TICK_MS);
 
     return () => clearInterval(timer);
   }, [width, height, frozen]);
