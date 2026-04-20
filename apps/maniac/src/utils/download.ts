@@ -1,6 +1,4 @@
 import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import { Worker } from 'node:worker_threads';
 import { fileURLToPath } from 'node:url';
 
@@ -46,26 +44,6 @@ type DownloadWorkerMessage =
   | DownloadWorkerDoneMessage
   | DownloadWorkerErrorMessage
   | DownloadWorkerTransportMessage;
-
-function isTransportDebugEnabled(): boolean {
-  return process.env.MANIAC_DOWNLOAD_DEBUG_TRANSPORT === '1';
-}
-
-function resolveTransportDebugLogPath(): string {
-  const configured = process.env.MANIAC_DOWNLOAD_DEBUG_LOG?.trim();
-  if (configured) return configured;
-  return path.join(os.homedir(), '.config', 'maniac', 'download-transport.log');
-}
-
-function appendTransportDebugLog(line: string): void {
-  try {
-    const logPath = resolveTransportDebugLogPath();
-    fs.mkdirSync(path.dirname(logPath), { recursive: true });
-    fs.appendFileSync(logPath, `${new Date().toISOString()} ${line}\n`, 'utf8');
-  } catch {
-    // Keep download flow resilient even if debug logging fails.
-  }
-}
 
 function isEntryPointModuleNotFound(err: unknown): boolean {
   const message = err instanceof Error ? err.message : String(err);
@@ -154,10 +132,8 @@ export function downloadFile(
         return;
       }
       if (msg.type === 'transport') {
-        if (isTransportDebugEnabled()) {
-          appendTransportDebugLog(
-            `[maniac] pid=${process.pid} file=${filename} transport=${msg.transport}`,
-          );
+        if (process.env.MANIAC_DOWNLOAD_DEBUG_TRANSPORT === '1') {
+          process.stderr.write(`[maniac] download transport: ${msg.transport}\n`);
         }
       }
     };
