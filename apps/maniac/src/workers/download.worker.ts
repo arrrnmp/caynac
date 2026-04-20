@@ -22,6 +22,7 @@ interface DownloadProgress {
 const PROGRESS_EMIT_MS = 150;
 const WRITE_HIGH_WATER_MARK = 1024 * 1024;
 const POWERSHELL_CHUNK_SIZE = 1024 * 1024;
+const DEBUG_INSANE = process.env.MANIAC_DOWNLOAD_INSANE_DEBUG === '1';
 
 type DownloadTransport = 'powershell' | 'pwsh' | 'curl' | 'fetch';
 
@@ -36,6 +37,35 @@ function isErrno(err: unknown, code: string): boolean {
     'code' in err &&
     (err as { code?: unknown }).code === code
   );
+}
+
+function summarizeUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.protocol}//${parsed.host}${parsed.pathname}`;
+  } catch {
+    return url;
+  }
+}
+
+function debug(message: string): void {
+  if (!DEBUG_INSANE) return;
+  parentPort?.postMessage({ type: 'debug', message });
+}
+
+function resolveWindowsPowerShellCommand(): string {
+  const candidates = [process.env.SystemRoot, process.env.windir]
+    .filter((value): value is string => Boolean(value))
+    .map((root) => path.join(root, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'));
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return 'powershell';
+}
+
+function bunVersion(): string {
+  const versions = process.versions as Record<string, string | undefined>;
+  return versions.bun ?? 'unknown';
 }
 
 function emitProgress(
@@ -88,6 +118,10 @@ async function downloadWithFetch(
   const startedAt = Date.now();
   const lastEmitAtRef = { value: 0 };
   let bytesReceived = 0;
+  let chunkCount = 0;
+  let lastDebugAt = startedAt;
+  let lastDebugBytes = 0;
+  debug(`fetch:start url=${summarizeUrl(url)} dest=${dest}`);
 
   try {
     const response = await fetch(url);
@@ -97,6 +131,9 @@ async function downloadWithFetch(
 
     const contentLength = Number.parseInt(response.headers.get('content-length') ?? '0', 10);
     const totalBytes = contentLength > 0 ? contentLength : expectedBytes;
+    debug(
+      `fetch:headers status=${response.status} content_length=${response.headers.get('content-length') ?? 'n/a'} content_type=${response.headers.get('content-type') ?? 'n/a'} server=${response.headers.get('server') ?? 'n/a'} via=${response.headers.get('via') ?? 'n/a'} cf_ray=${response.headers.get('cf-ray') ?? 'n/a'}`,
+    );
     const body = response.body;
     if (!body) throw new Error('Download response has no body');
 
@@ -107,16 +144,33 @@ async function downloadWithFetch(
       if (!value || value.byteLength === 0) continue;
 
       bytesReceived += value.byteLength;
+      chunkCount += 1;
       await writeChunk(file, value);
       emitProgress(filename, bytesReceived, totalBytes, startedAt, lastEmitAtRef);
+      const now = Date.now();
+      if (DEBUG_INSANE && now - lastDebugAt >= 1000) {
+        const deltaBytes = bytesReceived - lastDebugBytes;
+        const deltaSec = Math.max(0.001, (now - lastDebugAt) / 1000);
+        const instRate = deltaBytes / deltaSec;
+        debug(
+          `fetch:progress bytes=${bytesReceived} inst_bps=${Math.round(instRate)} avg_bps=${Math.round(bytesReceived / Math.max(0.001, (now - startedAt) / 1000))} chunks=${chunkCount}`,
+        );
+        lastDebugAt = now;
+        lastDebugBytes = bytesReceived;
+      }
     }
 
     await closeStream(file);
     emitProgress(filename, bytesReceived, totalBytes, startedAt, lastEmitAtRef, true);
+    const durationSec = Math.max(0.001, (Date.now() - startedAt) / 1000);
+    debug(
+      `fetch:done bytes=${bytesReceived} duration_s=${durationSec.toFixed(3)} avg_bps=${Math.round(bytesReceived / durationSec)} chunks=${chunkCount}`,
+    );
     return dest;
   } catch (err) {
     file.destroy();
     await fs.promises.unlink(dest).catch(() => {});
+    debug(`fetch:error message=${toMessage(err)}`);
     throw err;
   }
 }
@@ -163,6 +217,11 @@ async function downloadWithExternalProcess(
   const lastEmitAtRef = { value: 0 };
   const totalBytes = expectedBytes > 0 ? expectedBytes : 0;
   let bytesReceived = 0;
+  let lastDebugAt = startedAt;
+  let lastDebugBytes = 0;
+  debug(
+    `process:start transport=${transport} command=${command} url=${summarizeUrl(url)} dest=${dest}`,
+  );
 
   let pollTimer: NodeJS.Timeout | undefined;
   try {
@@ -181,6 +240,7 @@ async function downloadWithExternalProcess(
         settled = true;
         fn();
       };
+      debug(`process:spawn transport=${transport} pid=${child.pid ?? -1}`);
 
       let stderr = '';
       child.stderr.on('data', (chunk: Buffer) => {
@@ -201,6 +261,17 @@ async function downloadWithExternalProcess(
           bytesReceived = 0;
         }
         emitProgress(filename, bytesReceived, totalBytes, startedAt, lastEmitAtRef);
+        const now = Date.now();
+        if (DEBUG_INSANE && now - lastDebugAt >= 1000) {
+          const deltaBytes = bytesReceived - lastDebugBytes;
+          const deltaSec = Math.max(0.001, (now - lastDebugAt) / 1000);
+          const instRate = deltaBytes / deltaSec;
+          debug(
+            `process:progress transport=${transport} bytes=${bytesReceived} inst_bps=${Math.round(instRate)} avg_bps=${Math.round(bytesReceived / Math.max(0.001, (now - startedAt) / 1000))}`,
+          );
+          lastDebugAt = now;
+          lastDebugBytes = bytesReceived;
+        }
       }, PROGRESS_EMIT_MS);
 
       child.on('error', (err) => finish(() => reject(err)));
@@ -211,9 +282,11 @@ async function downloadWithExternalProcess(
         }
         const detail = stderr.trim();
         if (detail) {
+          debug(`process:exit transport=${transport} code=${code ?? -1} signal=${signal ?? 'none'} stderr=${detail}`);
           finish(() => reject(new Error(`${transport}: ${detail}`)));
           return;
         }
+        debug(`process:exit transport=${transport} code=${code ?? -1} signal=${signal ?? 'none'} stderr=none`);
         finish(() => reject(new Error(`${transport} exited with code ${code ?? 'null'}${signal ? ` (signal ${signal})` : ''}`)));
       });
     });
@@ -222,10 +295,15 @@ async function downloadWithExternalProcess(
     pollTimer = undefined;
     bytesReceived = fs.statSync(dest).size;
     emitProgress(filename, bytesReceived, totalBytes, startedAt, lastEmitAtRef, true);
+    const durationSec = Math.max(0.001, (Date.now() - startedAt) / 1000);
+    debug(
+      `process:done transport=${transport} bytes=${bytesReceived} duration_s=${durationSec.toFixed(3)} avg_bps=${Math.round(bytesReceived / durationSec)}`,
+    );
     return dest;
   } catch (err) {
     if (pollTimer) clearInterval(pollTimer);
     await fs.promises.unlink(dest).catch(() => {});
+    debug(`process:error transport=${transport} message=${toMessage(err)}`);
     throw err;
   }
 }
@@ -249,15 +327,23 @@ async function downloadInWorker(
 ): Promise<string> {
   const transports = transportOrder();
   const errors: string[] = [];
+  debug(
+    `download:start platform=${process.platform} bun=${bunVersion()} transports=${transports.join(',')} url=${summarizeUrl(url)} expected_bytes=${expectedBytes} dest_dir=${destDir} file=${filename}`,
+  );
+  const powershellCommand = resolveWindowsPowerShellCommand();
 
   for (const transport of transports) {
+    const attemptStartedAt = Date.now();
     parentPort?.postMessage({ type: 'transport', transport });
+    debug(`transport:attempt transport=${transport}`);
     try {
       if (transport === 'fetch') {
-        return await downloadWithFetch(url, destDir, filename, expectedBytes);
+        const result = await downloadWithFetch(url, destDir, filename, expectedBytes);
+        debug(`transport:success transport=${transport} duration_ms=${Date.now() - attemptStartedAt}`);
+        return result;
       }
       if (transport === 'curl') {
-        return await downloadWithExternalProcess(
+        const result = await downloadWithExternalProcess(
           'curl',
           ['--location', '--fail', '--silent', '--show-error', '--output', path.join(destDir, filename), url],
           'curl',
@@ -266,10 +352,12 @@ async function downloadInWorker(
           filename,
           expectedBytes,
         );
+        debug(`transport:success transport=${transport} duration_ms=${Date.now() - attemptStartedAt}`);
+        return result;
       }
       if (transport === 'powershell') {
-        return await downloadWithExternalProcess(
-          'powershell',
+        const result = await downloadWithExternalProcess(
+          powershellCommand,
           ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', windowsPowerShellScript()],
           'powershell',
           url,
@@ -277,8 +365,10 @@ async function downloadInWorker(
           filename,
           expectedBytes,
         );
+        debug(`transport:success transport=${transport} duration_ms=${Date.now() - attemptStartedAt}`);
+        return result;
       }
-      return await downloadWithExternalProcess(
+      const result = await downloadWithExternalProcess(
         'pwsh',
         ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', windowsPowerShellScript()],
         'pwsh',
@@ -287,12 +377,18 @@ async function downloadInWorker(
         filename,
         expectedBytes,
       );
+      debug(`transport:success transport=${transport} duration_ms=${Date.now() - attemptStartedAt}`);
+      return result;
     } catch (err) {
-      errors.push(toMessage(err));
+      const message = toMessage(err);
+      errors.push(message);
+      parentPort?.postMessage({ type: 'transport_error', transport, message });
+      debug(`transport:failure transport=${transport} duration_ms=${Date.now() - attemptStartedAt} message=${message}`);
       if (isErrno(err, 'ENOENT')) continue;
     }
   }
 
+  debug(`download:failed errors=${errors.join(' | ')}`);
   throw new Error(`Download failed across transports: ${errors.join(' | ')}`);
 }
 
