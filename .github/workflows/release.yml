@@ -102,6 +102,7 @@ jobs:
             --compile \
             --target=${{ matrix.target }} \
             --format=esm \
+            --bytecode \
             --minify \
             --sourcemap \
             --define BUILD_VERSION='"${{ github.ref_name }}"' \
@@ -131,6 +132,10 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Download all build artifacts
         uses: actions/download-artifact@v4
         with:
@@ -147,13 +152,32 @@ jobs:
           files: dist/*
           generate_release_notes: true
 
+      - name: Compute pre-release tag
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        id: pretag
+        shell: bash
+        run: |
+          git fetch --tags --force
+          base_tag="$(git tag -l | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)"
+          if [ -z "${base_tag}" ]; then
+            base_tag="v0.0.0"
+          fi
+          base_re="${base_tag//./\\.}"
+          max_suffix="$(git tag -l "${base_tag}.*" | grep -E "^${base_re}\.[0-9]+$" | sed -E "s/^${base_re}\.([0-9]+)$/\\1/" | sort -n | tail -n1 || true)"
+          if [ -z "${max_suffix}" ]; then
+            max_suffix=0
+          fi
+          pre_tag="${base_tag}.$((max_suffix + 1))"
+          echo "base_tag=${base_tag}" >> "${GITHUB_OUTPUT}"
+          echo "pre_tag=${pre_tag}" >> "${GITHUB_OUTPUT}"
+
       - name: Create GitHub Pre-release
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: pre-${{ github.sha }}
+          tag_name: ${{ steps.pretag.outputs.pre_tag }}
           target_commitish: ${{ github.sha }}
-          name: Pre-release ${{ github.ref_name }} @ ${{ github.sha }}
+          name: Pre-release ${{ steps.pretag.outputs.pre_tag }}
           prerelease: true
           make_latest: false
           files: dist/*
