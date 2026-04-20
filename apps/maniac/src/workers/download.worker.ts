@@ -21,9 +21,6 @@ interface DownloadProgress {
 
 const PROGRESS_EMIT_MS = 150;
 const WRITE_HIGH_WATER_MARK = 1024 * 1024;
-const POWERSHELL_CHUNK_SIZE = 1024 * 1024;
-
-type DownloadTransport = 'powershell' | 'pwsh' | 'curl' | 'fetch';
 
 function toMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -121,36 +118,7 @@ async function downloadWithFetch(
   }
 }
 
-function windowsPowerShellScript(): string {
-  return [
-    "$ErrorActionPreference='Stop'",
-    "$url=$env:MANIAC_URL",
-    "$dest=$env:MANIAC_DEST",
-    "if ([string]::IsNullOrWhiteSpace($url)) { throw 'MANIAC_URL is empty' }",
-    "if ([string]::IsNullOrWhiteSpace($dest)) { throw 'MANIAC_DEST is empty' }",
-    '$handler=[System.Net.Http.HttpClientHandler]::new()',
-    '$handler.AutomaticDecompression=[System.Net.DecompressionMethods]::GZip -bor [System.Net.DecompressionMethods]::Deflate',
-    '$client=[System.Net.Http.HttpClient]::new($handler)',
-    '$client.Timeout=[TimeSpan]::FromMinutes(30)',
-    '$response=$client.GetAsync($url,[System.Net.Http.HttpCompletionOption]::ResponseHeadersRead).GetAwaiter().GetResult()',
-    '$response.EnsureSuccessStatusCode()',
-    '$src=$response.Content.ReadAsStreamAsync().GetAwaiter().GetResult()',
-    '$dst=[System.IO.File]::Open($dest,[System.IO.FileMode]::Create,[System.IO.FileAccess]::Write,[System.IO.FileShare]::Read)',
-    `$buffer=New-Object byte[] (${POWERSHELL_CHUNK_SIZE})`,
-    'while (($read=$src.Read($buffer,0,$buffer.Length)) -gt 0) { $dst.Write($buffer,0,$read) }',
-    '$dst.Flush()',
-    '$dst.Dispose()',
-    '$src.Dispose()',
-    '$response.Dispose()',
-    '$client.Dispose()',
-    '$handler.Dispose()',
-  ].join('; ');
-}
-
-async function downloadWithExternalProcess(
-  command: string,
-  args: string[],
-  transport: DownloadTransport,
+async function downloadWithCurl(
   url: string,
   destDir: string,
   filename: string,
@@ -167,14 +135,11 @@ async function downloadWithExternalProcess(
   let pollTimer: NodeJS.Timeout | undefined;
   try {
     await new Promise<void>((resolve, reject) => {
-      const child = spawn(command, args, {
-        stdio: ['ignore', 'ignore', 'pipe'],
-        env: {
-          ...process.env,
-          MANIAC_URL: url,
-          MANIAC_DEST: dest,
-        },
-      });
+      const child = spawn(
+        'curl',
+        ['--location', '--fail', '--silent', '--show-error', '--output', dest, url],
+        { stdio: ['ignore', 'ignore', 'pipe'] },
+      );
       let settled = false;
       const finish = (fn: () => void) => {
         if (settled) return;
@@ -211,10 +176,10 @@ async function downloadWithExternalProcess(
         }
         const detail = stderr.trim();
         if (detail) {
-          finish(() => reject(new Error(`${transport}: ${detail}`)));
+          finish(() => reject(new Error(detail)));
           return;
         }
-        finish(() => reject(new Error(`${transport} exited with code ${code ?? 'null'}${signal ? ` (signal ${signal})` : ''}`)));
+        finish(() => reject(new Error(`curl exited with code ${code ?? 'null'}${signal ? ` (signal ${signal})` : ''}`)));
       });
     });
 
@@ -230,70 +195,22 @@ async function downloadWithExternalProcess(
   }
 }
 
-function transportOrder(): DownloadTransport[] {
-  const forced = process.env.MANIAC_DOWNLOAD_TRANSPORT?.trim().toLowerCase();
-  if (forced === 'fetch') return ['fetch'];
-  if (forced === 'curl') return ['curl'];
-  if (forced === 'powershell') return ['powershell'];
-  if (forced === 'pwsh') return ['pwsh'];
-
-  if (process.platform === 'win32') return ['powershell', 'pwsh', 'curl', 'fetch'];
-  return ['fetch'];
-}
-
 async function downloadInWorker(
   url: string,
   destDir: string,
   filename: string,
   expectedBytes = 0,
 ): Promise<string> {
-  const transports = transportOrder();
-  const errors: string[] = [];
-
-  for (const transport of transports) {
-    parentPort?.postMessage({ type: 'transport', transport });
+  if (process.platform === 'win32') {
     try {
-      if (transport === 'fetch') {
-        return await downloadWithFetch(url, destDir, filename, expectedBytes);
-      }
-      if (transport === 'curl') {
-        return await downloadWithExternalProcess(
-          'curl',
-          ['--location', '--fail', '--silent', '--show-error', '--output', path.join(destDir, filename), url],
-          'curl',
-          url,
-          destDir,
-          filename,
-          expectedBytes,
-        );
-      }
-      if (transport === 'powershell') {
-        return await downloadWithExternalProcess(
-          'powershell',
-          ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', windowsPowerShellScript()],
-          'powershell',
-          url,
-          destDir,
-          filename,
-          expectedBytes,
-        );
-      }
-      return await downloadWithExternalProcess(
-        'pwsh',
-        ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', windowsPowerShellScript()],
-        'pwsh',
-        url,
-        destDir,
-        filename,
-        expectedBytes,
-      );
+      return await downloadWithCurl(url, destDir, filename, expectedBytes);
     } catch (err) {
-      errors.push(toMessage(err));
-      if (isErrno(err, 'ENOENT')) continue;
+      if (!isErrno(err, 'ENOENT')) throw err;
+      return downloadWithFetch(url, destDir, filename, expectedBytes);
     }
   }
 
-  throw new Error(`Download failed across transports: ${errors.join(' | ')}`);
+  return downloadWithFetch(url, destDir, filename, expectedBytes);
 }
 
 async function main() {
