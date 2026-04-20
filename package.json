@@ -5,7 +5,12 @@
   "scripts": {
     "dev:maniac": "cd apps/maniac && bun run dev",
     "dev:caymann": "cd apps/caymann && bun run dev",
-    "build": "bunx tsc -b apps/maniac apps/caymann"
+    "build": "bunx tsc -b apps/maniac apps/caymann",
+    "compile:maniac:darwin-arm64": "bun build --compile --target=bun-darwin-arm64 apps/maniac/src/cli.tsx apps/maniac/src/workers/download.worker.ts packages/shared/src/workers/compression.worker.ts packages/shared/src/workers/picocrypt.worker.ts --outfile dist/maniac-darwin-arm64",
+    "compile:maniac:windows-x64": "bun build --compile --target=bun-windows-x64 apps/maniac/src/cli.tsx apps/maniac/src/workers/download.worker.ts packages/shared/src/workers/compression.worker.ts packages/shared/src/workers/picocrypt.worker.ts --outfile dist/maniac-windows-x64.exe",
+    "compile:caymann:darwin-arm64": "bun build --compile --target=bun-darwin-arm64 apps/caymann/src/cli.tsx packages/shared/src/workers/compression.worker.ts packages/shared/src/workers/picocrypt.worker.ts --outfile dist/caymann-darwin-arm64",
+    "compile:caymann:windows-x64": "bun build --compile --target=bun-windows-x64 apps/caymann/src/cli.tsx packages/shared/src/workers/compression.worker.ts packages/shared/src/workers/picocrypt.worker.ts --outfile dist/caymann-windows-x64.exe",
+    "compile": "bun run compile:maniac:darwin-arm64 && bun run compile:maniac:windows-x64 && bun run compile:caymann:darwin-arm64 && bun run compile:caymann:windows-x64"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",

@@ -79,6 +79,10 @@ jobs:
       - name: Compile ${{ matrix.artifact }}
         run: |
           mkdir -p dist
+          worker_entries="packages/shared/src/workers/compression.worker.ts packages/shared/src/workers/picocrypt.worker.ts"
+          if [ "${{ matrix.entry }}" = "apps/maniac/src/cli.tsx" ]; then
+            worker_entries="apps/maniac/src/workers/download.worker.ts ${worker_entries}"
+          fi
           bun build \
             --compile \
             --target=${{ matrix.target }} \
@@ -89,6 +93,7 @@ jobs:
             --define BUILD_VERSION='"${{ github.ref_name }}"' \
             --define BUILD_COMMIT='"${{ github.sha }}"' \
             ${{ matrix.entry }} \
+            ${worker_entries} \
             --outfile dist/${{ matrix.output }}
           sha256sum dist/${{ matrix.output }} > dist/${{ matrix.output }}.sha256
 

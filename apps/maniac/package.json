@@ -11,8 +11,8 @@
     "build": "tsc -b",
     "start": "bun dist/cli.js",
     "prepare": "bun run build",
-    "compile:darwin-arm64": "bun build --compile --target=bun-darwin-arm64 src/cli.tsx --outfile dist/maniac-darwin-arm64",
-    "compile:windows-x64": "bun build --compile --target=bun-windows-x64 src/cli.tsx --outfile dist/maniac-windows-x64.exe",
+    "compile:darwin-arm64": "bun build --compile --target=bun-darwin-arm64 src/cli.tsx src/workers/download.worker.ts ../../packages/shared/src/workers/compression.worker.ts ../../packages/shared/src/workers/picocrypt.worker.ts --outfile dist/maniac-darwin-arm64",
+    "compile:windows-x64": "bun build --compile --target=bun-windows-x64 src/cli.tsx src/workers/download.worker.ts ../../packages/shared/src/workers/compression.worker.ts ../../packages/shared/src/workers/picocrypt.worker.ts --outfile dist/maniac-windows-x64.exe",
     "compile": "bun run compile:darwin-arm64 && bun run compile:windows-x64"
   },
   "engines": {
