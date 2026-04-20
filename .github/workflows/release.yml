@@ -27,16 +27,6 @@ jobs:
             entry: apps/maniac/src/cli.tsx
             target: bun-darwin-arm64
             output: maniac-darwin-arm64
-          - artifact: maniac-windows-arm64
-            runner: windows-2022
-            entry: apps/maniac/src/cli.tsx
-            target: bun-windows-arm64
-            output: maniac-windows-arm64.exe
-          - artifact: maniac-windows-x64-baseline
-            runner: windows-2022
-            entry: apps/maniac/src/cli.tsx
-            target: bun-windows-x64-baseline
-            output: maniac-windows-x64-baseline.exe
           - artifact: maniac-windows-x64-modern
             runner: windows-2022
             entry: apps/maniac/src/cli.tsx
@@ -47,16 +37,6 @@ jobs:
             entry: apps/caymann/src/cli.tsx
             target: bun-darwin-arm64
             output: caymann-darwin-arm64
-          - artifact: caymann-windows-arm64
-            runner: windows-2022
-            entry: apps/caymann/src/cli.tsx
-            target: bun-windows-arm64
-            output: caymann-windows-arm64.exe
-          - artifact: caymann-windows-x64-baseline
-            runner: windows-2022
-            entry: apps/caymann/src/cli.tsx
-            target: bun-windows-x64-baseline
-            output: caymann-windows-x64-baseline.exe
           - artifact: caymann-windows-x64-modern
             runner: windows-2022
             entry: apps/caymann/src/cli.tsx
