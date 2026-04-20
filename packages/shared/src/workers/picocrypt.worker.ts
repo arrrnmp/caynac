@@ -77,18 +77,21 @@ function runPicocryptTask(opts: PicocryptOptions): Promise<void> {
       reject(new Error(errBuf.trim() || outBuf.trim() || `${bin} exited with code ${code}`));
     });
 
-    child.on('error', (err) => {
-      reject(
-        new Error(
-          `Failed to run ${bin}: ${err.message}\n` +
-          `Tip: run "maniac onboarding" to install dependencies automatically\n` +
-          `or install Picocrypt NG CLI from https://github.com/Picocrypt-NG/Picocrypt-NG\n` +
-          `Or set picocryptPath in ~/.config/maniac/config.json`,
-        ),
-      );
-    });
+  child.on('error', (err) => {
+    reject(
+      new Error(
+        `Failed to run ${bin}: ${err.message}\n` +
+        `Tip: run "maniac onboarding" to install dependencies automatically\n` +
+        `or install Picocrypt NG CLI from https://github.com/Picocrypt-NG/Picocrypt-NG\n` +
+        `Or set picocryptPath in ~/.config/maniac/config.json`,
+      ),
+    );
+  });
 
-    child.stdin.end();
+  if (!opts.password && (opts.keyfiles?.length ?? 0) > 0) {
+    child.stdin.write('\n');
+  }
+  child.stdin.end();
   });
 }
 
