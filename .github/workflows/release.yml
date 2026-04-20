@@ -17,56 +17,68 @@ permissions:
 jobs:
   build:
     name: Build ${{ matrix.artifact }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - artifact: maniac-darwin-arm64
+            runner: macos-14
             entry: apps/maniac/src/cli.tsx
             target: bun-darwin-arm64
             output: maniac-darwin-arm64
           - artifact: maniac-darwin-x64-baseline
+            runner: macos-13
             entry: apps/maniac/src/cli.tsx
             target: bun-darwin-x64-baseline
             output: maniac-darwin-x64-baseline
           - artifact: maniac-darwin-x64-modern
+            runner: macos-13
             entry: apps/maniac/src/cli.tsx
             target: bun-darwin-x64-modern
             output: maniac-darwin-x64-modern
           - artifact: maniac-windows-arm64
+            runner: windows-2022
             entry: apps/maniac/src/cli.tsx
             target: bun-windows-arm64
             output: maniac-windows-arm64.exe
           - artifact: maniac-windows-x64-baseline
+            runner: windows-2022
             entry: apps/maniac/src/cli.tsx
             target: bun-windows-x64-baseline
             output: maniac-windows-x64-baseline.exe
           - artifact: maniac-windows-x64-modern
+            runner: windows-2022
             entry: apps/maniac/src/cli.tsx
             target: bun-windows-x64-modern
             output: maniac-windows-x64-modern.exe
           - artifact: caymann-darwin-arm64
+            runner: macos-14
             entry: apps/caymann/src/cli.tsx
             target: bun-darwin-arm64
             output: caymann-darwin-arm64
           - artifact: caymann-darwin-x64-baseline
+            runner: macos-13
             entry: apps/caymann/src/cli.tsx
             target: bun-darwin-x64-baseline
             output: caymann-darwin-x64-baseline
           - artifact: caymann-darwin-x64-modern
+            runner: macos-13
             entry: apps/caymann/src/cli.tsx
             target: bun-darwin-x64-modern
             output: caymann-darwin-x64-modern
           - artifact: caymann-windows-arm64
+            runner: windows-2022
             entry: apps/caymann/src/cli.tsx
             target: bun-windows-arm64
             output: caymann-windows-arm64.exe
           - artifact: caymann-windows-x64-baseline
+            runner: windows-2022
             entry: apps/caymann/src/cli.tsx
             target: bun-windows-x64-baseline
             output: caymann-windows-x64-baseline.exe
           - artifact: caymann-windows-x64-modern
+            runner: windows-2022
             entry: apps/caymann/src/cli.tsx
             target: bun-windows-x64-modern
             output: caymann-windows-x64-modern.exe
@@ -79,16 +91,12 @@ jobs:
         run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Compile ${{ matrix.artifact }}
+        shell: bash
         run: |
           mkdir -p dist
           worker_entries="packages/shared/src/workers/compression.worker.ts packages/shared/src/workers/picocrypt.worker.ts"
-          bytecode_flag="--bytecode"
           if [ "${{ matrix.entry }}" = "apps/maniac/src/cli.tsx" ]; then
             worker_entries="apps/maniac/src/workers/download.worker.ts ${worker_entries}"
-          fi
-          if [[ "${{ matrix.target }}" == bun-windows-* ]]; then
-            # Windows compiled binaries can crash at runtime with embedded bytecode (llint_entry).
-            bytecode_flag=""
           fi
           bun build \
             --compile \
@@ -96,13 +104,16 @@ jobs:
             --format=esm \
             --minify \
             --sourcemap \
-            ${bytecode_flag} \
             --define BUILD_VERSION='"${{ github.ref_name }}"' \
             --define BUILD_COMMIT='"${{ github.sha }}"' \
             ${{ matrix.entry }} \
             ${worker_entries} \
             --outfile dist/${{ matrix.output }}
-          sha256sum dist/${{ matrix.output }} > dist/${{ matrix.output }}.sha256
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum dist/${{ matrix.output }} > dist/${{ matrix.output }}.sha256
+          else
+            shasum -a 256 dist/${{ matrix.output }} > dist/${{ matrix.output }}.sha256
+          fi
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
