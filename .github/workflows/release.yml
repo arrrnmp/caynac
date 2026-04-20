@@ -80,8 +80,13 @@ jobs:
         run: |
           mkdir -p dist
           worker_entries="packages/shared/src/workers/compression.worker.ts packages/shared/src/workers/picocrypt.worker.ts"
+          bytecode_flag="--bytecode"
           if [ "${{ matrix.entry }}" = "apps/maniac/src/cli.tsx" ]; then
             worker_entries="apps/maniac/src/workers/download.worker.ts ${worker_entries}"
+          fi
+          if [[ "${{ matrix.target }}" == bun-windows-* ]]; then
+            # Windows compiled binaries can crash at runtime with embedded bytecode (llint_entry).
+            bytecode_flag=""
           fi
           bun build \
             --compile \
@@ -89,7 +94,7 @@ jobs:
             --format=esm \
             --minify \
             --sourcemap \
-            --bytecode \
+            ${bytecode_flag} \
             --define BUILD_VERSION='"${{ github.ref_name }}"' \
             --define BUILD_COMMIT='"${{ github.sha }}"' \
             ${{ matrix.entry }} \
