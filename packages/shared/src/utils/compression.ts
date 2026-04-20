@@ -1,6 +1,6 @@
-import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { runWorkerTask } from './workers.js';
 
 export type CompressionAlgo = 'lzma2' | 'zstd';
 
@@ -15,49 +15,34 @@ export interface CompressionOptions {
   binaryPath?: string;
 }
 
+interface CompressionWorkerPayload {
+  type: 'compress';
+  options: CompressionOptions;
+}
+
+interface ExtractWorkerPayload {
+  type: 'extract';
+  archive: string;
+  outputDir: string;
+  password?: string;
+  binaryPath?: string;
+}
+
+interface CompressionWorkerProgress {
+  pct: number;
+  file: string;
+}
+
 export function compressFiles(
   opts: CompressionOptions,
   onProgress: (pct: number, file: string) => void,
 ): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const bin = opts.binaryPath ?? '7z';
-    const args: string[] = ['a', '-t7z', '-bsp1'];
-
-    if (opts.algorithm === 'lzma2') {
-      args.push('-m0=lzma2', `-mx=${opts.level}`);
-    } else {
-      args.push('-m0=zstd', `-mx=${opts.level}`);
-    }
-
-    if (opts.password) {
-      args.push(`-p${opts.password}`);
-      if (opts.encryptFilenames) args.push('-mhe=on');
-    }
-
-    if (opts.splitSize) args.push(`-v${opts.splitSize}`);
-
-    args.push(opts.output, ...opts.sources);
-
-    const child = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
-    let errBuf = '';
-
-    child.stdout.on('data', (data: Buffer) => {
-      const text = data.toString();
-      const match = text.match(/^\s*(\d+)%\s*(?:-\s*(.+))?/m);
-      if (match) onProgress(parseInt(match[1]!, 10), (match[2] ?? '').trim());
-    });
-
-    child.stderr.on('data', (d: Buffer) => { errBuf += d.toString(); });
-
-    child.on('close', (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(errBuf.trim() || `${bin} exited with code ${code}`));
-    });
-
-    child.on('error', (err) => {
-      reject(new Error(`Failed to run ${bin}: ${err.message} — run onboarding to install 7-Zip.`));
-    });
-  });
+  return runWorkerTask<CompressionWorkerPayload, CompressionWorkerProgress, void>(
+    import.meta.url,
+    '../workers/compression.worker',
+    { type: 'compress', options: opts },
+    (progress) => onProgress(progress.pct, progress.file),
+  );
 }
 
 export function extractFiles(
@@ -67,31 +52,12 @@ export function extractFiles(
   onProgress: (pct: number, file: string) => void,
   binaryPath?: string,
 ): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const bin = binaryPath ?? '7z';
-    const args = ['x', archive, `-o${outputDir}`, '-y', '-bsp1'];
-    if (password) args.push(`-p${password}`);
-
-    const child = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
-    let errBuf = '';
-
-    child.stdout.on('data', (data: Buffer) => {
-      const text = data.toString();
-      const match = text.match(/^\s*(\d+)%\s*(?:-\s*(.+))?/m);
-      if (match) onProgress(parseInt(match[1]!, 10), (match[2] ?? '').trim());
-    });
-
-    child.stderr.on('data', (d: Buffer) => { errBuf += d.toString(); });
-
-    child.on('close', (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(errBuf.trim() || `${bin} exited with code ${code}`));
-    });
-
-    child.on('error', (err) => {
-      reject(new Error(`Failed to run ${bin}: ${err.message} — run onboarding to install 7-Zip.`));
-    });
-  });
+  return runWorkerTask<ExtractWorkerPayload, CompressionWorkerProgress, void>(
+    import.meta.url,
+    '../workers/compression.worker',
+    { type: 'extract', archive, outputDir, password, binaryPath },
+    (progress) => onProgress(progress.pct, progress.file),
+  );
 }
 
 /** Returns the archive file(s) to delete — handles split archives (.7z.001 etc). */
