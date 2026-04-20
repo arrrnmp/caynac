@@ -41,45 +41,25 @@ interface DownloadWorkerTransportMessage {
   transport: string;
 }
 
-interface DownloadWorkerTransportErrorMessage {
-  type: 'transport_error';
-  transport: string;
-  message: string;
-}
-
-interface DownloadWorkerDebugMessage {
-  type: 'debug';
-  message: string;
-}
-
 type DownloadWorkerMessage =
   | DownloadWorkerProgressMessage
   | DownloadWorkerDoneMessage
   | DownloadWorkerErrorMessage
-  | DownloadWorkerTransportMessage
-  | DownloadWorkerTransportErrorMessage
-  | DownloadWorkerDebugMessage;
+  | DownloadWorkerTransportMessage;
 
 function isTransportDebugEnabled(): boolean {
   return process.env.MANIAC_DOWNLOAD_DEBUG_TRANSPORT === '1';
 }
 
-function isInsaneDebugEnabled(): boolean {
-  return process.env.MANIAC_DOWNLOAD_INSANE_DEBUG === '1';
-}
-
-function resolveDownloadDebugLogPath(): string {
+function resolveTransportDebugLogPath(): string {
   const configured = process.env.MANIAC_DOWNLOAD_DEBUG_LOG?.trim();
   if (configured) return configured;
-  if (isInsaneDebugEnabled()) {
-    return path.join(os.homedir(), '.config', 'maniac', 'download-debug.log');
-  }
   return path.join(os.homedir(), '.config', 'maniac', 'download-transport.log');
 }
 
-function appendDownloadDebugLog(line: string): void {
+function appendTransportDebugLog(line: string): void {
   try {
-    const logPath = resolveDownloadDebugLogPath();
+    const logPath = resolveTransportDebugLogPath();
     fs.mkdirSync(path.dirname(logPath), { recursive: true });
     fs.appendFileSync(logPath, `${new Date().toISOString()} ${line}\n`, 'utf8');
   } catch {
@@ -174,24 +154,10 @@ export function downloadFile(
         return;
       }
       if (msg.type === 'transport') {
-        if (isTransportDebugEnabled() || isInsaneDebugEnabled()) {
-          appendDownloadDebugLog(
+        if (isTransportDebugEnabled()) {
+          appendTransportDebugLog(
             `[maniac] pid=${process.pid} file=${filename} transport=${msg.transport}`,
           );
-        }
-        return;
-      }
-      if (msg.type === 'transport_error') {
-        if (isInsaneDebugEnabled()) {
-          appendDownloadDebugLog(
-            `[maniac] pid=${process.pid} file=${filename} transport_error=${msg.transport} message=${msg.message}`,
-          );
-        }
-        return;
-      }
-      if (msg.type === 'debug') {
-        if (isInsaneDebugEnabled()) {
-          appendDownloadDebugLog(`[maniac] pid=${process.pid} file=${filename} ${msg.message}`);
         }
       }
     };
