@@ -50,6 +50,8 @@ interface Orbiter {
   vx: number;
   vy: number;
   spriteRows: string[];
+  spriteW: number;
+  spriteH: number;
   color: string;
   bright: boolean;
   blinkAt: number;
@@ -236,6 +238,8 @@ const PLANET_KINDS: readonly PlanetKind[] = [
   'neptune',
 ] as const;
 const GAS_GIANT_KINDS = new Set<PlanetKind>(['jupiter', 'saturn', 'uranus', 'neptune']);
+const IS_WINDOWS = process.platform === 'win32';
+const STARFIELD_TICK_MS = IS_WINDOWS ? 130 : 90;
 
 const rand = (min: number, max: number) => min + Math.random() * (max - min);
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
@@ -481,6 +485,8 @@ function dormantOrbiter(now: number): Orbiter {
     vx: 0,
     vy: 0,
     spriteRows: ['•'],
+    spriteW: 1,
+    spriteH: 1,
     color: '#6E7890',
     bright: false,
     blinkAt: now + rand(300, 1600),
@@ -512,6 +518,8 @@ function spawnOrbiter(width: number, height: number, now: number): Orbiter {
     vx,
     vy: rand(-0.7, 0.7),
     spriteRows,
+    spriteW,
+    spriteH,
     color: model.color,
     bright: Math.random() < 0.24,
     blinkAt: now + rand(200, 1400),
@@ -1060,17 +1068,17 @@ function drawRows(
   height: number,
   blackHole: BlackHole,
 ): Cell[][] {
-  const nebula = buildNebulaFrame(width, height, clouds);
+  const nebula = IS_WINDOWS ? null : buildNebulaFrame(width, height, clouds);
   const rows: Cell[][] = Array.from({ length: height }, (_, y) =>
     Array.from({ length: width }, (_, x) => ({
       char: ' ',
       color: undefined,
-      backgroundColor: nebula[y]![x]!,
+      backgroundColor: nebula ? nebula[y]![x]! : BACKGROUND,
       priority: 0,
     })),
   );
 
-  drawNebulaWisps(rows, width, height, clouds);
+  if (!IS_WINDOWS) drawNebulaWisps(rows, width, height, clouds);
   for (const planet of planets) drawPlanetVisitor(rows, width, height, planet);
 
   for (const star of stars) {
@@ -1094,7 +1102,7 @@ function drawRows(
       });
     }
 
-    if (star.layer === 2) {
+    if (!IS_WINDOWS && star.layer === 2) {
       placeCell(rows, width, height, x - 1, y, { char: '✦', color: '#7B8FC0', priority: 2 });
       placeCell(rows, width, height, x + 1, y, { char: '✦', color: '#7B8FC0', priority: 2 });
     }
@@ -1107,6 +1115,7 @@ function drawRows(
 
   for (const comet of comets) {
     if (!comet.active) continue;
+    if (IS_WINDOWS) continue;
     drawPlasmaComet(rows, width, height, comet);
   }
 
@@ -1152,7 +1161,10 @@ export function StarfieldBackdrop({ width, height, mouseReactive = false, frozen
 
   useEffect(() => {
     const now = Date.now();
-    const totalStars = Math.max(34, Math.min(130, Math.floor((width * height) / 92)));
+    const totalStars = Math.max(
+      IS_WINDOWS ? 22 : 34,
+      Math.min(IS_WINDOWS ? 84 : 130, Math.floor((width * height) / (IS_WINDOWS ? 150 : 92))),
+    );
     const layerCounts: [number, number, number] = [
       Math.floor(totalStars * 0.44),
       Math.floor(totalStars * 0.34),
@@ -1168,13 +1180,19 @@ export function StarfieldBackdrop({ width, height, mouseReactive = false, frozen
     }
     starsRef.current = rebuiltStars;
 
-    const cometCount = Math.max(1, Math.min(3, Math.floor(width / 85)));
+    const cometCount = IS_WINDOWS ? 0 : Math.max(1, Math.min(3, Math.floor(width / 85)));
     cometsRef.current = Array.from({ length: cometCount }, () => dormantComet(now));
 
-    const orbiterCount = Math.max(3, Math.min(9, Math.floor(width / 26)));
+    const orbiterCount = Math.max(
+      IS_WINDOWS ? 2 : 3,
+      Math.min(IS_WINDOWS ? 5 : 9, Math.floor(width / (IS_WINDOWS ? 42 : 26))),
+    );
     orbitersRef.current = Array.from({ length: orbiterCount }, () => dormantOrbiter(now));
 
-    const cloudCount = Math.max(3, Math.min(8, Math.floor((width * height) / 430)));
+    const cloudCount = Math.max(
+      IS_WINDOWS ? 1 : 3,
+      Math.min(IS_WINDOWS ? 3 : 8, Math.floor((width * height) / (IS_WINDOWS ? 820 : 430))),
+    );
     cloudsRef.current = Array.from({ length: cloudCount }, (_, i) => {
       if (i < Math.ceil(cloudCount * 0.55)) {
         const cloud = spawnCloud(width, height);
@@ -1185,7 +1203,7 @@ export function StarfieldBackdrop({ width, height, mouseReactive = false, frozen
     });
 
     planetsRef.current = [];
-    nextPlanetSpawnAtRef.current = now + rand(200, 1800);
+    nextPlanetSpawnAtRef.current = now + rand(IS_WINDOWS ? 900 : 200, IS_WINDOWS ? 3400 : 1800);
     // Force one render with the initialized refs so the component shows a proper
     // frame even when frozen=true stops the animation interval from ever firing.
     setTick((v) => v + 1);
@@ -1318,12 +1336,10 @@ export function StarfieldBackdrop({ width, height, mouseReactive = false, frozen
         orbiter.x += orbiter.vx * dt;
         orbiter.y += orbiter.vy * dt;
 
-        const spriteW = Math.max(...orbiter.spriteRows.map((row) => row.length));
-        const spriteH = orbiter.spriteRows.length;
         const offscreen =
-          orbiter.x < -spriteW - 8 ||
-          orbiter.x > width + spriteW + 8 ||
-          orbiter.y < -spriteH - 3 ||
+          orbiter.x < -orbiter.spriteW - 8 ||
+          orbiter.x > width + orbiter.spriteW + 8 ||
+          orbiter.y < -orbiter.spriteH - 3 ||
           orbiter.y > height + 3;
         if (offscreen) orbitersRef.current[i] = dormantOrbiter(now);
       }
@@ -1420,7 +1436,7 @@ export function StarfieldBackdrop({ width, height, mouseReactive = false, frozen
       }
 
       setTick((v) => v + 1);
-    }, 90);
+    }, STARFIELD_TICK_MS);
 
     return () => clearInterval(timer);
   }, [width, height, frozen]);

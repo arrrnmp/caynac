@@ -1,7 +1,6 @@
-import https from 'node:https';
-import http from 'node:http';
 import fs from 'node:fs';
-import path from 'node:path';
+import { Worker } from 'node:worker_threads';
+import { fileURLToPath } from 'node:url';
 
 export interface DownloadProgress {
   filename: string;
@@ -11,6 +10,40 @@ export interface DownloadProgress {
   speed: number; // bytes/sec
 }
 
+interface DownloadWorkerPayload {
+  url: string;
+  destDir: string;
+  filename: string;
+}
+
+interface DownloadWorkerProgressMessage {
+  type: 'progress';
+  progress: DownloadProgress;
+}
+
+interface DownloadWorkerDoneMessage {
+  type: 'done';
+  result: {
+    dest: string;
+  };
+}
+
+interface DownloadWorkerErrorMessage {
+  type: 'error';
+  message: string;
+}
+
+type DownloadWorkerMessage =
+  | DownloadWorkerProgressMessage
+  | DownloadWorkerDoneMessage
+  | DownloadWorkerErrorMessage;
+
+function resolveWorkerUrl(): URL {
+  const jsUrl = new URL('../workers/download.worker.js', import.meta.url);
+  if (fs.existsSync(fileURLToPath(jsUrl))) return jsUrl;
+  return new URL('../workers/download.worker.ts', import.meta.url);
+}
+
 export function downloadFile(
   url: string,
   destDir: string,
@@ -18,49 +51,53 @@ export function downloadFile(
   onProgress: (p: DownloadProgress) => void,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
-    fs.mkdirSync(destDir, { recursive: true });
-    const dest = path.join(destDir, filename);
-    const file = fs.createWriteStream(dest);
-    const protocol = url.startsWith('https') ? https : http;
-    const startTime = Date.now();
-    let bytesReceived = 0;
+    const worker = new Worker(resolveWorkerUrl(), {
+      workerData: { url, destDir, filename } as DownloadWorkerPayload,
+    });
+    let settled = false;
 
-    const req = protocol.get(url, (res) => {
-      if (res.statusCode === 301 || res.statusCode === 302) {
-        file.close();
-        fs.unlink(dest, () => {});
-        downloadFile(res.headers.location!, destDir, filename, onProgress)
-          .then(resolve)
-          .catch(reject);
+    const settle = (finalize: () => void) => {
+      if (settled) return;
+      settled = true;
+      worker.off('message', handleMessage);
+      worker.off('error', handleError);
+      worker.off('exit', handleExit);
+      void worker.terminate().catch(() => {});
+      finalize();
+    };
+
+    const handleMessage = (message: unknown) => {
+      if (!message || typeof message !== 'object') return;
+      const msg = message as DownloadWorkerMessage;
+      if (msg.type === 'progress') {
+        onProgress(msg.progress);
         return;
       }
+      if (msg.type === 'done') {
+        settle(() => resolve(msg.result.dest));
+        return;
+      }
+      if (msg.type === 'error') {
+        settle(() => reject(new Error(msg.message)));
+      }
+    };
 
-      const totalBytes = parseInt(res.headers['content-length'] ?? '0', 10);
+    const handleError = (err: Error) => {
+      settle(() => reject(err));
+    };
 
-      res.on('data', (chunk: Buffer) => {
-        bytesReceived += chunk.length;
-        const elapsed = (Date.now() - startTime) / 1000;
-        const speed = elapsed > 0 ? bytesReceived / elapsed : 0;
-        const percentage = totalBytes > 0 ? (bytesReceived / totalBytes) * 100 : 0;
-        onProgress({ filename, bytesReceived, totalBytes, percentage, speed });
-      });
+    const handleExit = (code: number) => {
+      if (settled) return;
+      if (code === 0) {
+        settle(() => reject(new Error('Download worker exited before completion.')));
+        return;
+      }
+      settle(() => reject(new Error(`Download worker exited with code ${code}`)));
+    };
 
-      res.pipe(file);
-
-      file.on('finish', () => {
-        file.close(() => resolve(dest));
-      });
-    });
-
-    req.on('error', (err) => {
-      fs.unlink(dest, () => {});
-      reject(err);
-    });
-
-    file.on('error', (err) => {
-      fs.unlink(dest, () => {});
-      reject(err);
-    });
+    worker.on('message', handleMessage);
+    worker.on('error', handleError);
+    worker.on('exit', handleExit);
   });
 }
 

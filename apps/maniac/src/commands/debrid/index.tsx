@@ -195,13 +195,22 @@ export function DebridCommand({ initialToken, initialMagnet, initialOutputDir, t
     if (step !== 'downloading') return;
     void (async () => {
       try {
+        const UI_PROGRESS_EMIT_MS = 150;
         const states: DownloadState[] = unrestricted.map((u) => ({
           filename: u.filename,
           pct: 0,
           speed: 0,
           total: u.filesize,
         }));
-        setDownloads([...states]);
+        let lastUiEmitAt = 0;
+        const flushDownloads = (force = false) => {
+          const now = Date.now();
+          if (!force && now - lastUiEmitAt < UI_PROGRESS_EMIT_MS) return;
+          lastUiEmitAt = now;
+          setDownloads(states.slice());
+        };
+
+        flushDownloads(true);
 
         for (let i = 0; i < unrestricted.length; i++) {
           setCurrentDl(i);
@@ -211,10 +220,11 @@ export function DebridCommand({ initialToken, initialMagnet, initialOutputDir, t
               filename: u.filename,
               pct: p.percentage,
               speed: p.speed,
-              total: p.totalBytes,
+              total: p.totalBytes > 0 ? p.totalBytes : states[i]!.total,
             };
-            setDownloads([...states]);
+            flushDownloads();
           });
+          flushDownloads(true);
         }
         mergeConfig({ defaultOutputDir: outputDir });
         setStep('done');

@@ -332,29 +332,44 @@ const handleMergeConfig = (patch: { sevenZipPath?: string; picocryptPath?: strin
           {baseBgRows}
         </Box>
         <Box position="absolute" width={cols} height={rows}>
-          {activeBackdrop === 'starfield' ? (
-            <>
-              <Box key="matrix-backdrop" position="absolute" width={cols} height={rows}>
-                <MatrixParallaxBackdrop width={cols} height={rows} frozen />
-              </Box>
-              <Box key="starfield-backdrop" position="absolute" width={cols} height={rows}>
-                <StarfieldBackdrop
-                  width={cols}
-                  height={rows}
-                  mouseReactive={mouseReactive}
-                  frozen={backdropWipe !== null}
-                />
-              </Box>
-            </>
+          {backdropWipe ? (
+            activeBackdrop === 'starfield' ? (
+              <>
+                <Box key="matrix-backdrop" position="absolute" width={cols} height={rows}>
+                  <MatrixParallaxBackdrop width={cols} height={rows} frozen />
+                </Box>
+                <Box key="starfield-backdrop" position="absolute" width={cols} height={rows}>
+                  <StarfieldBackdrop
+                    width={cols}
+                    height={rows}
+                    mouseReactive={mouseReactive}
+                    frozen={false}
+                  />
+                </Box>
+              </>
+            ) : (
+              <>
+                <Box key="starfield-backdrop" position="absolute" width={cols} height={rows}>
+                  <StarfieldBackdrop width={cols} height={rows} mouseReactive={false} frozen />
+                </Box>
+                <Box key="matrix-backdrop" position="absolute" width={cols} height={rows}>
+                  <MatrixParallaxBackdrop width={cols} height={rows} frozen={false} />
+                </Box>
+              </>
+            )
+          ) : activeBackdrop === 'starfield' ? (
+            <Box key="starfield-backdrop" position="absolute" width={cols} height={rows}>
+              <StarfieldBackdrop
+                width={cols}
+                height={rows}
+                mouseReactive={mouseReactive}
+                frozen={false}
+              />
+            </Box>
           ) : (
-            <>
-              <Box key="starfield-backdrop" position="absolute" width={cols} height={rows}>
-                <StarfieldBackdrop width={cols} height={rows} mouseReactive={false} frozen />
-              </Box>
-              <Box key="matrix-backdrop" position="absolute" width={cols} height={rows}>
-                <MatrixParallaxBackdrop width={cols} height={rows} frozen={backdropWipe !== null} />
-              </Box>
-            </>
+            <Box key="matrix-backdrop" position="absolute" width={cols} height={rows}>
+              <MatrixParallaxBackdrop width={cols} height={rows} frozen={false} />
+            </Box>
           )}
         </Box>
         {maskedBackdropRows.length > 0 && (
