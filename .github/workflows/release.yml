@@ -1,0 +1,41 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - run: bun install
+
+      - name: Compile maniac (macOS ARM64)
+        run: bun build --compile --target=bun-darwin-arm64 apps/maniac/src/cli.tsx --outfile dist/maniac-darwin-arm64
+
+      - name: Compile maniac (Windows x64)
+        run: bun build --compile --target=bun-windows-x64 apps/maniac/src/cli.tsx --outfile dist/maniac-windows-x64.exe
+
+      - name: Compile caymann (macOS ARM64)
+        run: bun build --compile --target=bun-darwin-arm64 apps/caymann/src/cli.tsx --outfile dist/caymann-darwin-arm64
+
+      - name: Compile caymann (Windows x64)
+        run: bun build --compile --target=bun-windows-x64 apps/caymann/src/cli.tsx --outfile dist/caymann-windows-x64.exe
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/maniac-darwin-arm64
+            dist/maniac-windows-x64.exe
+            dist/caymann-darwin-arm64
+            dist/caymann-windows-x64.exe
+          generate_release_notes: true
