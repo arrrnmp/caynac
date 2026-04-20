@@ -210,6 +210,10 @@ export function App({
     backdropWipe
       ? (backdropWipe.progress < 0.5 ? backdropWipe.from : backdropWipe.to)
       : (onboardingOutro != null ? 'matrix' : sourceBackdrop);
+  const backdropLayerOrder: ReadonlyArray<BackdropKind> =
+    activeBackdrop === 'starfield'
+      ? ['matrix', 'starfield']
+      : ['starfield', 'matrix'];
   const mouseReactive = !isExiting && (transition
     ? (transition.progress < 0.5 ? screen === 'menu' : transition.target === 'menu')
     : screen === 'menu');
@@ -309,45 +313,31 @@ export function App({
           {baseBgRows}
         </Box>
         <Box position="absolute" width={cols} height={rows}>
-          {backdropWipe ? (
-            activeBackdrop === 'starfield' ? (
-              <>
-                <Box key="matrix-backdrop" position="absolute" width={cols} height={rows}>
-                  <MatrixParallaxBackdrop width={cols} height={rows} frozen />
-                </Box>
-                <Box key="starfield-backdrop" position="absolute" width={cols} height={rows}>
+          {backdropLayerOrder.map((kind) => {
+            const isVisible = backdropWipe != null || activeBackdrop === kind;
+            const isActiveLayer = activeBackdrop === kind;
+
+            return (
+              <Box
+                key={`${kind}-backdrop`}
+                position="absolute"
+                width={cols}
+                height={rows}
+                display={isVisible ? 'flex' : 'none'}
+              >
+                {kind === 'starfield' ? (
                   <StarfieldBackdrop
                     width={cols}
                     height={rows}
-                    mouseReactive={mouseReactive}
-                    frozen={false}
+                    mouseReactive={isActiveLayer ? mouseReactive : false}
+                    frozen={!isActiveLayer}
                   />
-                </Box>
-              </>
-            ) : (
-              <>
-                <Box key="starfield-backdrop" position="absolute" width={cols} height={rows}>
-                  <StarfieldBackdrop width={cols} height={rows} mouseReactive={false} frozen />
-                </Box>
-                <Box key="matrix-backdrop" position="absolute" width={cols} height={rows}>
-                  <MatrixParallaxBackdrop width={cols} height={rows} frozen={false} />
-                </Box>
-              </>
-            )
-          ) : activeBackdrop === 'starfield' ? (
-            <Box key="starfield-backdrop" position="absolute" width={cols} height={rows}>
-              <StarfieldBackdrop
-                width={cols}
-                height={rows}
-                mouseReactive={mouseReactive}
-                frozen={false}
-              />
-            </Box>
-          ) : (
-            <Box key="matrix-backdrop" position="absolute" width={cols} height={rows}>
-              <MatrixParallaxBackdrop width={cols} height={rows} frozen={false} />
-            </Box>
-          )}
+                ) : (
+                  <MatrixParallaxBackdrop width={cols} height={rows} frozen={!isActiveLayer} />
+                )}
+              </Box>
+            );
+          })}
         </Box>
         {maskedBackdropRows.length > 0 && (
           <Box position="absolute" width={cols} height={rows} overflow="hidden">

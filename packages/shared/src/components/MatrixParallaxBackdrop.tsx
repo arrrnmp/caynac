@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text } from 'ink';
 import { useMouse } from '../hooks/useMouse.js';
+import { isWindowsReducedEffects } from '../utils/terminal.js';
 
 const BG = '#000000';
 const EXCITE_RADIUS = 14;
-const IS_WINDOWS = process.platform === 'win32';
-const MATRIX_TICK_MS = IS_WINDOWS ? 130 : 90;
+const WINDOWS_REDUCED_EFFECTS = isWindowsReducedEffects();
+const MATRIX_TICK_MS = WINDOWS_REDUCED_EFFECTS ? 130 : 90;
 
 // Characters per layer — increasing richness toward the foreground
 const CHARS_BY_LAYER = [
@@ -111,7 +112,7 @@ function spawnDrop(drop: Drop, now: number): Drop {
   const chars = CHARS_BY_LAYER[drop.layer];
   const trailLen = Math.max(
     3,
-    Math.floor(rand(cfg.trailMin, cfg.trailMax) * (IS_WINDOWS ? 0.7 : 1)),
+    Math.floor(rand(cfg.trailMin, cfg.trailMax) * (WINDOWS_REDUCED_EFFECTS ? 0.7 : 1)),
   );
   return {
     ...drop,
@@ -129,7 +130,7 @@ function spawnDrop(drop: Drop, now: number): Drop {
 function initLayer(layer: LayerIdx, width: number, height: number, now: number): Drop[] {
   const cfg = LAYER_CFG[layer];
   const drops: Drop[] = [];
-  for (let col = cfg.colOffset; col < width; col += cfg.colStep * (IS_WINDOWS ? 2 : 1)) {
+  for (let col = cfg.colOffset; col < width; col += cfg.colStep * (WINDOWS_REDUCED_EFFECTS ? 2 : 1)) {
     const dormant = dormantDrop(col, layer, now + rand(200, 3500));
     if (Math.random() < 0.6) {
       // Pre-spawn with head scattered across the visible area so the matrix
@@ -174,7 +175,7 @@ function buildFrame(
 
   const mx = mouseActive ? mouseX : width / 2;
 
-  const layerCount = IS_WINDOWS ? 2 : 3;
+  const layerCount = WINDOWS_REDUCED_EFFECTS ? 2 : 3;
   for (let l = 0 as LayerIdx; l < layerCount; l++) {
     const layer = l as LayerIdx;
     const cfg = LAYER_CFG[layer];

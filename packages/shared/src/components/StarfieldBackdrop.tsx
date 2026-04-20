@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text } from 'ink';
 import { useMouse } from '../hooks/useMouse.js';
+import { isWindowsReducedEffects } from '../utils/terminal.js';
 
 interface StarfieldBackdropProps {
   width: number;
@@ -238,8 +239,8 @@ const PLANET_KINDS: readonly PlanetKind[] = [
   'neptune',
 ] as const;
 const GAS_GIANT_KINDS = new Set<PlanetKind>(['jupiter', 'saturn', 'uranus', 'neptune']);
-const IS_WINDOWS = process.platform === 'win32';
-const STARFIELD_TICK_MS = IS_WINDOWS ? 130 : 90;
+const WINDOWS_REDUCED_EFFECTS = isWindowsReducedEffects();
+const STARFIELD_TICK_MS = WINDOWS_REDUCED_EFFECTS ? 130 : 90;
 
 const rand = (min: number, max: number) => min + Math.random() * (max - min);
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
@@ -1068,7 +1069,7 @@ function drawRows(
   height: number,
   blackHole: BlackHole,
 ): Cell[][] {
-  const nebula = IS_WINDOWS ? null : buildNebulaFrame(width, height, clouds);
+  const nebula = WINDOWS_REDUCED_EFFECTS ? null : buildNebulaFrame(width, height, clouds);
   const rows: Cell[][] = Array.from({ length: height }, (_, y) =>
     Array.from({ length: width }, (_, x) => ({
       char: ' ',
@@ -1078,7 +1079,7 @@ function drawRows(
     })),
   );
 
-  if (!IS_WINDOWS) drawNebulaWisps(rows, width, height, clouds);
+  if (!WINDOWS_REDUCED_EFFECTS) drawNebulaWisps(rows, width, height, clouds);
   for (const planet of planets) drawPlanetVisitor(rows, width, height, planet);
 
   for (const star of stars) {
@@ -1102,7 +1103,7 @@ function drawRows(
       });
     }
 
-    if (!IS_WINDOWS && star.layer === 2) {
+    if (!WINDOWS_REDUCED_EFFECTS && star.layer === 2) {
       placeCell(rows, width, height, x - 1, y, { char: '✦', color: '#7B8FC0', priority: 2 });
       placeCell(rows, width, height, x + 1, y, { char: '✦', color: '#7B8FC0', priority: 2 });
     }
@@ -1115,7 +1116,7 @@ function drawRows(
 
   for (const comet of comets) {
     if (!comet.active) continue;
-    if (IS_WINDOWS) continue;
+    if (WINDOWS_REDUCED_EFFECTS) continue;
     drawPlasmaComet(rows, width, height, comet);
   }
 
@@ -1162,8 +1163,11 @@ export function StarfieldBackdrop({ width, height, mouseReactive = false, frozen
   useEffect(() => {
     const now = Date.now();
     const totalStars = Math.max(
-      IS_WINDOWS ? 22 : 34,
-      Math.min(IS_WINDOWS ? 84 : 130, Math.floor((width * height) / (IS_WINDOWS ? 150 : 92))),
+      WINDOWS_REDUCED_EFFECTS ? 22 : 34,
+      Math.min(
+        WINDOWS_REDUCED_EFFECTS ? 84 : 130,
+        Math.floor((width * height) / (WINDOWS_REDUCED_EFFECTS ? 150 : 92)),
+      ),
     );
     const layerCounts: [number, number, number] = [
       Math.floor(totalStars * 0.44),
@@ -1180,18 +1184,21 @@ export function StarfieldBackdrop({ width, height, mouseReactive = false, frozen
     }
     starsRef.current = rebuiltStars;
 
-    const cometCount = IS_WINDOWS ? 0 : Math.max(1, Math.min(3, Math.floor(width / 85)));
+    const cometCount = WINDOWS_REDUCED_EFFECTS ? 0 : Math.max(1, Math.min(3, Math.floor(width / 85)));
     cometsRef.current = Array.from({ length: cometCount }, () => dormantComet(now));
 
     const orbiterCount = Math.max(
-      IS_WINDOWS ? 2 : 3,
-      Math.min(IS_WINDOWS ? 5 : 9, Math.floor(width / (IS_WINDOWS ? 42 : 26))),
+      WINDOWS_REDUCED_EFFECTS ? 2 : 3,
+      Math.min(WINDOWS_REDUCED_EFFECTS ? 5 : 9, Math.floor(width / (WINDOWS_REDUCED_EFFECTS ? 42 : 26))),
     );
     orbitersRef.current = Array.from({ length: orbiterCount }, () => dormantOrbiter(now));
 
     const cloudCount = Math.max(
-      IS_WINDOWS ? 1 : 3,
-      Math.min(IS_WINDOWS ? 3 : 8, Math.floor((width * height) / (IS_WINDOWS ? 820 : 430))),
+      WINDOWS_REDUCED_EFFECTS ? 1 : 3,
+      Math.min(
+        WINDOWS_REDUCED_EFFECTS ? 3 : 8,
+        Math.floor((width * height) / (WINDOWS_REDUCED_EFFECTS ? 820 : 430)),
+      ),
     );
     cloudsRef.current = Array.from({ length: cloudCount }, (_, i) => {
       if (i < Math.ceil(cloudCount * 0.55)) {
@@ -1203,7 +1210,7 @@ export function StarfieldBackdrop({ width, height, mouseReactive = false, frozen
     });
 
     planetsRef.current = [];
-    nextPlanetSpawnAtRef.current = now + rand(IS_WINDOWS ? 900 : 200, IS_WINDOWS ? 3400 : 1800);
+    nextPlanetSpawnAtRef.current = now + rand(WINDOWS_REDUCED_EFFECTS ? 900 : 200, WINDOWS_REDUCED_EFFECTS ? 3400 : 1800);
     // Force one render with the initialized refs so the component shows a proper
     // frame even when frozen=true stops the animation interval from ever firing.
     setTick((v) => v + 1);
