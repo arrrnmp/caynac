@@ -34,10 +34,16 @@ interface DownloadWorkerErrorMessage {
   message: string;
 }
 
+interface DownloadWorkerTransportMessage {
+  type: 'transport';
+  transport: string;
+}
+
 type DownloadWorkerMessage =
   | DownloadWorkerProgressMessage
   | DownloadWorkerDoneMessage
-  | DownloadWorkerErrorMessage;
+  | DownloadWorkerErrorMessage
+  | DownloadWorkerTransportMessage;
 
 function isEntryPointModuleNotFound(err: unknown): boolean {
   const message = err instanceof Error ? err.message : String(err);
@@ -123,6 +129,12 @@ export function downloadFile(
       }
       if (msg.type === 'error') {
         settle(() => reject(new Error(msg.message)));
+        return;
+      }
+      if (msg.type === 'transport') {
+        if (process.env.MANIAC_DOWNLOAD_DEBUG_TRANSPORT === '1') {
+          process.stderr.write(`[maniac] download transport: ${msg.transport}\n`);
+        }
       }
     };
 
