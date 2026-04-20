@@ -36,7 +36,10 @@ export interface CommandResult {
   stderr: string;
 }
 
-const RELEASE_URL = 'https://api.github.com/repos/Picocrypt/CLI/releases/latest';
+const RELEASE_URL = 'https://api.github.com/repos/Picocrypt-NG/Picocrypt-NG/releases/latest';
+const PICOCRYPT_NG_CLI_NAMES = process.platform === 'win32'
+  ? ['picocrypt-ng-cli.exe', 'Picocrypt-NG-cli.exe', 'picocrypt-ng-cli']
+  : ['picocrypt-ng-cli', 'Picocrypt-NG-cli', 'Picocrypt-NG-cli-macos'];
 
 export function platformLabel(platform: NodeJS.Platform): string {
   if (platform === 'darwin') return 'macOS';
@@ -120,37 +123,45 @@ export async function detectSevenZipPath(configPath?: string): Promise<string | 
 
 export async function detectPicocryptPath(configPath?: string): Promise<string | undefined> {
   const fromConfig = configuredBinary(configPath);
-  if (fromConfig) return fromConfig;
+  if (fromConfig && await isPicocryptNgCli(fromConfig)) return fromConfig;
 
-  const names = process.platform === 'win32'
-    ? ['picocrypt-cli.exe', 'picocrypt.exe', 'picocrypt-cli', 'picocrypt']
-    : ['picocrypt-cli', 'picocrypt'];
-
-  for (const name of names) {
+  for (const name of PICOCRYPT_NG_CLI_NAMES) {
     const found = await findCommandOnPath(name);
-    if (found) return found;
+    if (found && await isPicocryptNgCli(found)) return found;
   }
   return undefined;
 }
 
+async function isPicocryptNgCli(binaryPath: string): Promise<boolean> {
+  try {
+    const help = await runCommand(binaryPath, ['--help']);
+    const output = `${help.stdout}\n${help.stderr}`.toLowerCase();
+    if (!output) return false;
+    const mentionsNg = output.includes('picocrypt ng') || output.includes('picocrypt-ng');
+    const hasSubcommands = output.includes('encrypt') && output.includes('decrypt');
+    const hasNgUsage = output.includes('picocrypt encrypt [flags]') && output.includes('picocrypt decrypt [flags]');
+    return hasSubcommands && (mentionsNg || hasNgUsage);
+  } catch {
+    return false;
+  }
+}
+
 export function pickPicocryptAsset(): string {
   if (process.platform === 'darwin') {
-    if (process.arch === 'arm64') return 'picocrypt-macos-arm64';
-    if (process.arch === 'x64') return 'picocrypt-macos-amd64';
+    if (process.arch === 'arm64' || process.arch === 'x64') return 'Picocrypt-NG-cli-macos';
   }
 
   if (process.platform === 'win32') {
-    if (process.arch === 'arm64') return 'picocrypt-windows-arm64.exe';
-    if (process.arch === 'x64') return 'picocrypt-windows-amd64.exe';
+    if (process.arch === 'arm64' || process.arch === 'x64') return 'Picocrypt-NG-cli.exe';
   }
 
   if (process.platform === 'linux') {
-    if (process.arch === 'arm64') return 'picocrypt-linux-arm64';
-    if (process.arch === 'x64') return 'picocrypt-linux-amd64';
+    if (process.arch === 'arm64') return 'Picocrypt-NG-cli-arm64';
+    if (process.arch === 'x64') return 'Picocrypt-NG-cli';
   }
 
   throw new Error(
-    `No Picocrypt CLI release asset for platform ${process.platform} (${process.arch}).`,
+    `No Picocrypt NG CLI release asset for platform ${process.platform} (${process.arch}).`,
   );
 }
 
@@ -289,7 +300,7 @@ export async function checkDependencies(options: CheckDependenciesOptions): Prom
       },
       {
         id: 'picocrypt',
-        label: 'Picocrypt CLI binary',
+        label: 'Picocrypt NG CLI binary',
         installed: Boolean(picocrypt),
         path: picocrypt,
       },
@@ -373,7 +384,7 @@ export async function installSevenZip(onLog?: (line: string) => void, options: I
 export async function installPicocrypt(binDir: string, onLog?: (line: string) => void, options: InstallOptions = {}): Promise<string> {
   const userAgent = options.userAgent ?? 'dependency-installer';
 
-  onLog?.('Resolving latest Picocrypt CLI release…');
+  onLog?.('Resolving latest Picocrypt NG CLI release…');
   const release = await httpsJson<GitHubRelease>(RELEASE_URL, userAgent);
   const assetName = pickPicocryptAsset();
   const asset = release.assets.find((candidate) => candidate.name === assetName);
@@ -384,7 +395,7 @@ export async function installPicocrypt(binDir: string, onLog?: (line: string) =>
   }
 
   fs.mkdirSync(binDir, { recursive: true });
-  const localName = process.platform === 'win32' ? 'picocrypt-cli.exe' : 'picocrypt-cli';
+  const localName = process.platform === 'win32' ? 'picocrypt-ng-cli.exe' : 'picocrypt-ng-cli';
   const destination = path.join(binDir, localName);
   onLog?.(`Downloading ${asset.name} from GitHub releases…`);
   await downloadFile(asset.browser_download_url, destination, userAgent);
@@ -393,6 +404,6 @@ export async function installPicocrypt(binDir: string, onLog?: (line: string) =>
     fs.chmodSync(destination, 0o755);
   }
 
-  onLog?.(`Installed Picocrypt CLI to ${destination}`);
+  onLog?.(`Installed Picocrypt NG CLI to ${destination}`);
   return destination;
 }

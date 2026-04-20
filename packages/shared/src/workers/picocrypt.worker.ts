@@ -8,6 +8,7 @@ interface PicocryptOptions {
   password?: string;
   keyfiles?: string[];
   reedsol?: boolean;
+  paranoid?: boolean;
   deniability?: boolean;
   comment?: string;
   binaryPath?: string;
@@ -19,39 +20,53 @@ interface WorkerTask {
 
 function runPicocryptTask(opts: PicocryptOptions): Promise<void> {
   return new Promise((resolve, reject) => {
-    const bin = opts.binaryPath ?? 'picocrypt-cli';
-    const args: string[] = [];
+    const bin = opts.binaryPath ?? 'picocrypt-ng-cli';
+    const args: string[] = [opts.mode, '-i', opts.input];
 
-    args.push(opts.mode === 'encrypt' ? '-e' : '-d');
-
+    if (opts.output) args.push('-o', opts.output);
     if (opts.password) args.push('-p', opts.password);
 
     for (const kf of opts.keyfiles ?? []) {
       args.push('-k', kf);
     }
 
-    if (opts.reedsol) args.push('-r');
-    if (opts.deniability) args.push('-D');
-    if (opts.comment) args.push('-c', opts.comment);
+    if (opts.mode === 'encrypt') {
+      if (opts.reedsol) args.push('--reed-solomon');
+      if (opts.paranoid) args.push('--paranoid');
+      if (opts.deniability) args.push('--deniability');
+      if (opts.comment) args.push('--comments', opts.comment);
+    } else if (opts.deniability) {
+      args.push('--deniability');
+    }
 
-    args.push('-o', opts.output);
-    args.push(opts.input);
+    // Worker mode is non-interactive; always overwrite existing targets.
+    args.push('-y');
 
-    const child = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(bin, args, { stdio: ['pipe', 'pipe', 'pipe'] });
+    let outBuf = '';
     let errBuf = '';
+
+    const parseProgress = (text: string) => {
+      for (const match of text.matchAll(/(\d+(?:\.\d+)?)\s*%/g)) {
+        const pct = Number.parseFloat(match[1] ?? '');
+        if (!Number.isFinite(pct)) continue;
+        parentPort?.postMessage({
+          type: 'progress',
+          progress: { pct },
+        });
+      }
+    };
 
     child.stdout.on('data', (data: Buffer) => {
       const text = data.toString();
-      const match = text.match(/(\d+(?:\.\d+)?)\s*%/);
-      if (!match) return;
-      parentPort?.postMessage({
-        type: 'progress',
-        progress: { pct: Number.parseFloat(match[1]!) },
-      });
+      outBuf += text;
+      parseProgress(text);
     });
 
     child.stderr.on('data', (d: Buffer) => {
-      errBuf += d.toString();
+      const text = d.toString();
+      errBuf += text;
+      parseProgress(text);
     });
 
     child.on('close', (code) => {
@@ -59,7 +74,7 @@ function runPicocryptTask(opts: PicocryptOptions): Promise<void> {
         resolve();
         return;
       }
-      reject(new Error(errBuf.trim() || `${bin} exited with code ${code}`));
+      reject(new Error(errBuf.trim() || outBuf.trim() || `${bin} exited with code ${code}`));
     });
 
     child.on('error', (err) => {
@@ -67,11 +82,13 @@ function runPicocryptTask(opts: PicocryptOptions): Promise<void> {
         new Error(
           `Failed to run ${bin}: ${err.message}\n` +
           `Tip: run "maniac onboarding" to install dependencies automatically\n` +
-          `or install picocrypt-cli from https://github.com/picocrypt/cli\n` +
+          `or install Picocrypt NG CLI from https://github.com/Picocrypt-NG/Picocrypt-NG\n` +
           `Or set picocryptPath in ~/.config/maniac/config.json`,
         ),
       );
     });
+
+    child.stdin.end();
   });
 }
 

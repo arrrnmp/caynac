@@ -82,7 +82,7 @@ export function App({ initialScreen = 'menu', initialFile, initialArchive }: App
   const cfg = readConfig();
   const [language, setLanguage] = useState<Language>(getLanguage(cfg));
   const t = getTranslations(language);
-  const picocryptBin = cfg.picocryptPath ?? 'picocrypt-cli';
+  const picocryptBin = cfg.picocryptPath ?? 'picocrypt-ng-cli';
   const sevenZipBin = cfg.sevenZipPath ?? '7z';
   const isExiting = exitStartedAt !== null;
 

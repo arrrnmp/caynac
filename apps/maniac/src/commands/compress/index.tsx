@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { TextInput } from '@inkjs/ui';
+import fs from 'node:fs';
+import path from 'node:path';
 import { theme, BLOCK_FULL, Spinner, ProgressBar, Badge, ErrorBox, PasswordInput, Divider, SelectList, compressFiles, type CompressionAlgo, type TransitionSnapshot, type ColoredGlyph, type Translations } from '@caynac/shared';
 import { readConfig } from '../../utils/config.js';
 
@@ -12,6 +14,7 @@ type Step =
   | 'enter_password'
   | 'pick_encrypt_names'
   | 'enter_split'
+  | 'ask_delete'
   | 'compressing'
   | 'done'
   | 'error';
@@ -26,6 +29,75 @@ interface Props {
 const cg = (text: string, color: string, bold?: boolean): ColoredGlyph[] =>
   [...text].map((ch) => ({ ch, color, bold }));
 
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let value = bytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  return `${value.toFixed(unitIndex === 0 ? 0 : 2)} ${units[unitIndex]}`;
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function computeEntrySize(entryPath: string): number {
+  try {
+    const stats = fs.lstatSync(entryPath);
+    if (stats.isSymbolicLink()) return 0;
+    if (stats.isFile()) return stats.size;
+    if (stats.isDirectory()) {
+      const entries = fs.readdirSync(entryPath, { withFileTypes: true });
+      let total = 0;
+      for (const entry of entries) {
+        total += computeEntrySize(path.join(entryPath, entry.name));
+      }
+      return total;
+    }
+    return 0;
+  } catch {
+    return 0;
+  }
+}
+
+function sumSourcesSize(sources: string[]): number {
+  return sources.reduce((total, src) => total + computeEntrySize(src), 0);
+}
+
+function listArchiveOutputs(archivePath: string): string[] {
+  const found: string[] = [];
+  if (fs.existsSync(archivePath)) found.push(archivePath);
+
+  const dir = path.dirname(archivePath);
+  const base = path.basename(archivePath);
+  const splitPartPattern = new RegExp(`^${escapeRegex(base)}\\.\\d+$`);
+
+  try {
+    for (const entry of fs.readdirSync(dir)) {
+      if (!splitPartPattern.test(entry)) continue;
+      found.push(path.join(dir, entry));
+    }
+  } catch {
+    // Ignore listing errors; done screen can still show partial metrics.
+  }
+
+  return Array.from(new Set(found));
+}
+
+function sumFileSizes(paths: string[]): number {
+  return paths.reduce((total, filePath) => {
+    try {
+      return total + fs.statSync(filePath).size;
+    } catch {
+      return total;
+    }
+  }, 0);
+}
+
 export function CompressCommand({ initialSource, onBack, registerSnapshot, t }: Props) {
   const cfg = readConfig();
   const sevenZipBin = cfg.sevenZipPath ?? '7z';
@@ -37,8 +109,12 @@ export function CompressCommand({ initialSource, onBack, registerSnapshot, t }: 
   const [password, setPassword] = useState('');
   const [encryptNames, setEncryptNames] = useState(false);
   const [splitSize, setSplitSize] = useState('');
+  const [deleteSource, setDeleteSource] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentFile, setCurrentFile] = useState('');
+  const [deletedSources, setDeletedSources] = useState<string[]>([]);
+  const [sourceBytes, setSourceBytes] = useState<number | null>(null);
+  const [archiveBytes, setArchiveBytes] = useState<number | null>(null);
   const [error, setError] = useState('');
   const fillRow = BLOCK_FULL.repeat(220);
 
@@ -71,6 +147,9 @@ export function CompressCommand({ initialSource, onBack, registerSnapshot, t }: 
       try {
         const sources = source.split(/\s+/).filter(Boolean);
         const out = output.endsWith('.7z') ? output : `${output}.7z`;
+        setDeletedSources([]);
+        setArchiveBytes(null);
+        setSourceBytes(sumSourcesSize(sources));
         await compressFiles(
           {
             sources,
@@ -87,6 +166,25 @@ export function CompressCommand({ initialSource, onBack, registerSnapshot, t }: 
             setCurrentFile(file);
           },
         );
+        const archiveOutputs = listArchiveOutputs(out);
+        setArchiveBytes(sumFileSizes(archiveOutputs));
+        if (deleteSource) {
+          const removed: string[] = [];
+          for (const src of sources) {
+            try {
+              const stats = fs.statSync(src);
+              if (stats.isDirectory()) {
+                fs.rmSync(src, { recursive: true });
+              } else {
+                fs.unlinkSync(src);
+              }
+              removed.push(src);
+            } catch {
+              // Mirror decompression behavior: best-effort cleanup.
+            }
+          }
+          setDeletedSources(removed);
+        }
         setStep('done');
       } catch (err) {
         fail((err as Error).message);
@@ -254,10 +352,28 @@ export function CompressCommand({ initialSource, onBack, registerSnapshot, t }: 
                 placeholder={t.splitSizePlaceholder}
                 onSubmit={(v) => {
                   setSplitSize(v.trim());
-                  setStep('compressing');
+                  setStep('ask_delete');
                 }}
               />
             </Box>
+          </Box>
+        )}
+
+        {step === 'ask_delete' && (
+          <Box flexDirection="column" gap={1}>
+            <Text color={theme.text} backgroundColor={theme.panelBg}>
+              <Text color={theme.brand} backgroundColor={theme.panelBg} bold>{t.compressDeleteSourcePrompt}</Text>
+            </Text>
+            <SelectList
+              options={[
+                { label: t.compressDeleteSourceYes, value: 'yes' },
+                { label: t.compressDeleteSourceNo, value: 'no' },
+              ]}
+              onChange={(v) => {
+                setDeleteSource(v === 'yes');
+                setStep('compressing');
+              }}
+            />
           </Box>
         )}
 
@@ -277,6 +393,9 @@ export function CompressCommand({ initialSource, onBack, registerSnapshot, t }: 
               {encryptNames ? ` · ${t.compressStatusFilenamesHidden}` : ''}
               {splitSize ? ` · ${t.compressStatusSplit.replace('{size}', splitSize)}` : ''}
             </Text>
+            {deleteSource && (
+              <Text color={theme.dim} backgroundColor={theme.panelBg}>{t.compressSourceWillBeDeleted}</Text>
+            )}
           </Box>
         )}
 
@@ -287,6 +406,55 @@ export function CompressCommand({ initialSource, onBack, registerSnapshot, t }: 
               {t.compressSavedTo}{' '}
               <Text color={theme.cyan} backgroundColor={theme.panelBg}>{output.endsWith('.7z') ? output : `${output}.7z`}</Text>
             </Text>
+            {sourceBytes !== null && archiveBytes !== null && sourceBytes > 0 && (
+              <Box flexDirection="column">
+                <Text color={theme.dim} backgroundColor={theme.panelBg}>
+                  {t.compressStatsSourceLabel} <Text color={theme.muted} backgroundColor={theme.panelBg}>{formatBytes(sourceBytes)}</Text>
+                </Text>
+                <Text color={theme.dim} backgroundColor={theme.panelBg}>
+                  {t.compressStatsArchiveLabel} <Text color={theme.muted} backgroundColor={theme.panelBg}>{formatBytes(archiveBytes)}</Text>
+                </Text>
+                <Text color={theme.dim} backgroundColor={theme.panelBg}>
+                  {t.compressStatsRatioLabel}{' '}
+                  <Text color={theme.text} backgroundColor={theme.panelBg}>{(archiveBytes / sourceBytes).toFixed(2)}x</Text>
+                </Text>
+                {archiveBytes <= sourceBytes ? (
+                  <>
+                    <Text color={theme.dim} backgroundColor={theme.panelBg}>
+                      {t.compressStatsReductionLabel}{' '}
+                      <Text color={theme.success} backgroundColor={theme.panelBg}>
+                        {(100 * (1 - archiveBytes / sourceBytes)).toFixed(2)}%
+                      </Text>
+                    </Text>
+                    <Text color={theme.dim} backgroundColor={theme.panelBg}>
+                      {t.compressStatsSavedLabel}{' '}
+                      <Text color={theme.success} backgroundColor={theme.panelBg}>{formatBytes(sourceBytes - archiveBytes)}</Text>
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <Text color={theme.dim} backgroundColor={theme.panelBg}>
+                      {t.compressStatsExpansionLabel}{' '}
+                      <Text color={theme.warning} backgroundColor={theme.panelBg}>
+                        {(100 * (archiveBytes / sourceBytes - 1)).toFixed(2)}%
+                      </Text>
+                    </Text>
+                    <Text color={theme.dim} backgroundColor={theme.panelBg}>
+                      {t.compressStatsExtraLabel}{' '}
+                      <Text color={theme.warning} backgroundColor={theme.panelBg}>{formatBytes(archiveBytes - sourceBytes)}</Text>
+                    </Text>
+                  </>
+                )}
+              </Box>
+            )}
+            {deletedSources.length > 0 && (
+              <Box flexDirection="column">
+                <Text color={theme.dim} backgroundColor={theme.panelBg}>{t.compressDeletedSourceLabel}</Text>
+                {deletedSources.map((src) => (
+                  <Text key={src} color={theme.muted} backgroundColor={theme.panelBg}> ✗ {src}</Text>
+                ))}
+              </Box>
+            )}
             <Divider />
             <Text color={theme.dim} backgroundColor={theme.panelBg}>
               {t.escReturnsToMenu}

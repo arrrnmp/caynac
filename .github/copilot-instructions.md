@@ -23,8 +23,8 @@ Automated testing and linting are not configured in this repository yet:
   - `realDebrid.ts`: Real-Debrid REST API wrapper + polling
   - `download.ts`: HTTP(S) file download with progress callbacks
   - `compression.ts`: `7z` spawn wrapper for compress/extract
-  - `picocrypt.ts`: `picocrypt-cli` spawn wrapper
-  - `onboarding.ts`: dependency detection + installer orchestration (7-Zip and Picocrypt CLI)
+  - `picocrypt.ts`: Picocrypt NG CLI spawn wrapper
+  - `onboarding.ts`: dependency detection + installer orchestration (7-Zip and Picocrypt NG CLI)
   - `config.ts`: persistent user config at `~/.config/maniac/config.json`
 - UI primitives (`Spinner`, `ProgressBar`, `ErrorBox`, `PasswordInput`, `MultiSelect`, etc.) live in `src/components/*` and are themed through `src/theme.ts`.
 

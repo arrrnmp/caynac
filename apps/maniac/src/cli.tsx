@@ -73,7 +73,7 @@ program
 
 program
   .command('picocrypt [file]')
-  .description('Encrypt or decrypt a file with picocrypt-cli (PV2)')
+  .description('Encrypt or decrypt a file with Picocrypt NG CLI (PV2)')
   .action((file: string | undefined) => {
     renderApp(<App initialScreen="picocrypt" initialFile={file} />);
   });
@@ -81,7 +81,7 @@ program
 program
   .command('onboarding')
   .alias('setup')
-  .description('Install required external dependencies (7-Zip and Picocrypt CLI)')
+  .description('Install required external dependencies (7-Zip and Picocrypt NG CLI)')
   .action(() => {
     renderApp(<App initialScreen="onboarding" />);
   });

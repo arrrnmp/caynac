@@ -8,13 +8,13 @@ export interface PicocryptOptions {
   password?: string;
   keyfiles?: string[];
   reedsol?: boolean;       // Reed-Solomon error correction
+  paranoid?: boolean;      // Serpent+XChaCha20 cascade mode
   deniability?: boolean;   // Plausible Deniability
-  comment?: string;        // Embed a comment (encrypt only)
+  comment?: string;        // Embed a header comment (encrypt only)
   /**
-   * Path to the picocrypt-cli binary.
-   * Picocrypt (GUI) and Picocrypt-NG are UI-only — use the CLI tool:
-   *   https://github.com/picocrypt/cli
-   * Defaults to 'picocrypt-cli'.
+   * Path to the Picocrypt NG CLI binary.
+   *   https://github.com/Picocrypt-NG/Picocrypt-NG
+   * Defaults to 'picocrypt-ng-cli'.
    */
   binaryPath?: string;
 }

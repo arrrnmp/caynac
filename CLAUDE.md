@@ -61,7 +61,7 @@ Shared code imported by both apps:
 - `commands/decompress/` — `DecompressCommand` (accepts `sevenZipBin` prop)
 - `commands/picocrypt-decrypt/` — `PicocryptDecryptCommand` (decrypt-only, accepts `picocryptBin` prop)
 - `utils/compression.ts` — 7-Zip subprocess wrapper
-- `utils/picocrypt.ts` — picocrypt-cli subprocess wrapper
+- `utils/picocrypt.ts` — Picocrypt NG CLI subprocess wrapper
 
 The `"bun"` export condition in `packages/shared/package.json` points to `./src/index.ts` so `bun run dev` works without a build step. TypeScript project references (`composite: true`) ensure `tsc -b` builds shared before apps.
 

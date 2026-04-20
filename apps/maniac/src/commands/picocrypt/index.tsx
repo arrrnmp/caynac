@@ -39,7 +39,7 @@ function autoOutput(file: string, mode: Mode): string {
 
 export function PicocryptCommand({ initialFile, onBack, registerSnapshot, t }: Props) {
   const cfg = readConfig();
-  const picocryptBin = cfg.picocryptPath ?? 'picocrypt-cli';
+  const picocryptBin = cfg.picocryptPath ?? 'picocrypt-ng-cli';
 
   const [step, setStep] = useState<Step>('pick_mode');
   const [mode, setMode] = useState<Mode>('encrypt');
@@ -160,12 +160,12 @@ export function PicocryptCommand({ initialFile, onBack, registerSnapshot, t }: P
         {step === 'enter_input' && (
           <Box flexDirection="column" gap={1}>
             <Text color={theme.text} backgroundColor={theme.panelBg}>
-              {t.enterPcvPath}
+              {mode === 'encrypt' ? t.encryptInputPrompt : t.enterPcvPath}
             </Text>
             <Box gap={1}>
               <Text color={theme.brand} backgroundColor={theme.panelBg}>›</Text>
               <TextInput
-                placeholder={t.inputFilePathPlaceholder}
+                placeholder={mode === 'encrypt' ? t.encryptInputPathPlaceholder : t.inputFilePathPlaceholder}
                 onSubmit={(v) => {
                   const f = v.trim();
                   setInputFile(f);

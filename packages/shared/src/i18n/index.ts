@@ -118,6 +118,7 @@ export interface Translations {
   operationDecrypt: string;
   operationDecryptDesc: string;
   encryptInputPrompt: string;
+  encryptInputPathPlaceholder: string;
   encryptOutputPrompt: string;
   encryptOutputPlaceholder: string;
   autoPlaceholder: string;
@@ -172,6 +173,18 @@ export interface Translations {
   compressStatusSplit: string;
   compressSuccess: string;
   compressSavedTo: string;
+  compressDeleteSourcePrompt: string;
+  compressDeleteSourceYes: string;
+  compressDeleteSourceNo: string;
+  compressSourceWillBeDeleted: string;
+  compressDeletedSourceLabel: string;
+  compressStatsSourceLabel: string;
+  compressStatsArchiveLabel: string;
+  compressStatsRatioLabel: string;
+  compressStatsReductionLabel: string;
+  compressStatsExpansionLabel: string;
+  compressStatsSavedLabel: string;
+  compressStatsExtraLabel: string;
 
   // === REAL-DEBRID COMMAND (MANIAC) ===
   debridBadge: string;
@@ -285,7 +298,7 @@ const translations: Record<Language, Translations> = {
     // Startup
     startupTitle: 'INICIO',
     checkingRequiredDeps: 'Comprobando dependencias requeridas',
-    scanningDeps: 'Escaneando 7-Zip y Picocrypt CLI…',
+    scanningDeps: 'Escaneando 7-Zip y Picocrypt NG CLI…',
 
     // Misc
     backToMenu: 'Volver al menú',
@@ -341,6 +354,7 @@ const translations: Record<Language, Translations> = {
     operationDecrypt: '🔓 Descifrar un archivo .pcv',
     operationDecryptDesc: 'descifrar archivo PV2',
     encryptInputPrompt: 'ruta del archivo de entrada',
+    encryptInputPathPlaceholder: '/ruta/al/archivo-o-carpeta',
     encryptOutputPrompt: 'Ruta de salida',
     encryptOutputPlaceholder: 'dejar vacío para automático',
     autoPlaceholder: 'dejar vacío para automático',
@@ -396,6 +410,18 @@ const translations: Record<Language, Translations> = {
     compressStatusSplit: 'dividido {size}',
     compressSuccess: '¡Archivo creado con éxito!',
     compressSavedTo: 'Guardado en',
+    compressDeleteSourcePrompt: '¿Eliminar archivo(s) de origen después de comprimir?',
+    compressDeleteSourceYes: 'Sí — eliminar origen al finalizar',
+    compressDeleteSourceNo: 'No — mantener origen',
+    compressSourceWillBeDeleted: 'El origen se eliminará al terminar',
+    compressDeletedSourceLabel: 'Archivo(s) de origen eliminado(s):',
+    compressStatsSourceLabel: 'Tamaño original:',
+    compressStatsArchiveLabel: 'Tamaño comprimido:',
+    compressStatsRatioLabel: 'Ratio (comprimido/original):',
+    compressStatsReductionLabel: 'Reducción:',
+    compressStatsExpansionLabel: 'Incremento:',
+    compressStatsSavedLabel: 'Bytes ahorrados:',
+    compressStatsExtraLabel: 'Bytes extra:',
 
     // === REAL-DEBRID COMMAND (MANIAC) ===
     debridBadge: 'Real-Debrid',
@@ -422,11 +448,11 @@ const translations: Record<Language, Translations> = {
 
     // === ONBOARDING ===
     onboardingBadge: 'Configuración inicial',
-    onboardingDescShort: 'Instalar dependencias externas: 7-Zip + Picocrypt CLI',
+    onboardingDescShort: 'Instalar dependencias externas: 7-Zip + Picocrypt NG CLI',
     onboardingPlatform: 'Plataforma:',
     onboardingPlatformWarning: 'La instalación automática actualmente soporta macOS y Windows.',
     sevenZipLabel: 'Binario 7-Zip (7z / 7zz)',
-    picocryptLabel: 'Binario Picocrypt CLI',
+    picocryptLabel: 'Binario Picocrypt NG CLI',
     missing: '(falta)',
     depsMissing: '{N} dependencia faltante',
     depsMissingPlural: '{N} dependencias faltantes',
@@ -507,7 +533,7 @@ const translations: Record<Language, Translations> = {
     // Startup
     startupTitle: 'STARTUP',
     checkingRequiredDeps: 'Checking required dependencies',
-    scanningDeps: 'Scanning 7-Zip and Picocrypt CLI…',
+    scanningDeps: 'Scanning 7-Zip and Picocrypt NG CLI…',
 
     // Misc
     backToMenu: 'Back to menu',
@@ -563,6 +589,7 @@ const translations: Record<Language, Translations> = {
     operationDecrypt: '🔓 Decrypt a .pcv file',
     operationDecryptDesc: 'decrypt a PV2 file',
     encryptInputPrompt: 'input file path',
+    encryptInputPathPlaceholder: '/path/to/file-or-folder',
     encryptOutputPrompt: 'Output path',
     encryptOutputPlaceholder: 'leave empty for auto',
     autoPlaceholder: 'leave empty for auto',
@@ -618,6 +645,18 @@ const translations: Record<Language, Translations> = {
     compressStatusSplit: 'split {size}',
     compressSuccess: 'Archive created successfully!',
     compressSavedTo: 'Saved to',
+    compressDeleteSourcePrompt: 'Delete source file(s) after compression?',
+    compressDeleteSourceYes: 'Yes — delete source once done',
+    compressDeleteSourceNo: 'No — keep source files',
+    compressSourceWillBeDeleted: 'Source files will be deleted when done',
+    compressDeletedSourceLabel: 'Deleted source file(s):',
+    compressStatsSourceLabel: 'Original size:',
+    compressStatsArchiveLabel: 'Compressed size:',
+    compressStatsRatioLabel: 'Ratio (compressed/original):',
+    compressStatsReductionLabel: 'Reduction:',
+    compressStatsExpansionLabel: 'Expansion:',
+    compressStatsSavedLabel: 'Bytes saved:',
+    compressStatsExtraLabel: 'Extra bytes:',
 
     // === REAL-DEBRID COMMAND (MANIAC) ===
     debridBadge: 'Real-Debrid',
@@ -644,11 +683,11 @@ const translations: Record<Language, Translations> = {
 
     // === ONBOARDING ===
     onboardingBadge: 'Onboarding',
-    onboardingDescShort: 'Install external dependencies: 7-Zip + Picocrypt CLI',
+    onboardingDescShort: 'Install external dependencies: 7-Zip + Picocrypt NG CLI',
     onboardingPlatform: 'Platform:',
     onboardingPlatformWarning: 'Automatic install currently supports macOS and Windows.',
     sevenZipLabel: '7-Zip binary (7z / 7zz)',
-    picocryptLabel: 'Picocrypt CLI binary',
+    picocryptLabel: 'Picocrypt NG CLI binary',
     missing: '(missing)',
     depsMissing: '{N} dependency missing',
     depsMissingPlural: '{N} dependencies missing',

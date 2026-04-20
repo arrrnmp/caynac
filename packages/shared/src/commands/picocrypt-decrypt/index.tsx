@@ -40,7 +40,7 @@ function autoOutput(file: string): string {
   return file.endsWith('.pcv') ? file.slice(0, -4) : `${file}.decrypted`;
 }
 
-export function PicocryptDecryptCommand({ initialFile, picocryptBin = 'picocrypt-cli', onBack, registerSnapshot, t }: Props) {
+export function PicocryptDecryptCommand({ initialFile, picocryptBin = 'picocrypt-ng-cli', onBack, registerSnapshot, t }: Props) {
   const [step, setStep] = useState<Step>(initialFile ? 'enter_output' : 'enter_input');
   const [inputFile, setInputFile] = useState(initialFile ?? '');
   const [outputFile, setOutputFile] = useState(initialFile ? autoOutput(initialFile) : '');
