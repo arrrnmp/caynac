@@ -1,0 +1,30 @@
+{
+  "name": "maniac",
+  "version": "1.0.0",
+  "description": "Your maniacal toolkit — unrestrict, compress, encrypt",
+  "type": "module",
+  "bin": {
+    "maniac": "./dist/cli.js"
+  },
+  "scripts": {
+    "dev": "bun src/cli.tsx",
+    "build": "tsc -b",
+    "start": "bun dist/cli.js",
+    "prepare": "bun run build"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@caynac/shared": "workspace:*",
+    "@inkjs/ui": "^2.0.0",
+    "commander": "^12.1.0",
+    "ink": "^5.0.0",
+    "react": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.3.0",
+    "typescript": "^5.4.0"
+  }
+}

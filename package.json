@@ -1,0 +1,13 @@
+{
+  "name": "caynac",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev:maniac": "cd apps/maniac && bun run dev",
+    "dev:caymann": "cd apps/caymann && bun run dev",
+    "build": "bunx tsc -b apps/maniac apps/caymann"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0"
+  }
+}
