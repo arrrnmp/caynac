@@ -27,16 +27,6 @@ jobs:
             entry: apps/maniac/src/cli.tsx
             target: bun-darwin-arm64
             output: maniac-darwin-arm64
-          - artifact: maniac-darwin-x64-baseline
-            runner: macos-13
-            entry: apps/maniac/src/cli.tsx
-            target: bun-darwin-x64-baseline
-            output: maniac-darwin-x64-baseline
-          - artifact: maniac-darwin-x64-modern
-            runner: macos-13
-            entry: apps/maniac/src/cli.tsx
-            target: bun-darwin-x64-modern
-            output: maniac-darwin-x64-modern
           - artifact: maniac-windows-arm64
             runner: windows-2022
             entry: apps/maniac/src/cli.tsx
@@ -57,16 +47,6 @@ jobs:
             entry: apps/caymann/src/cli.tsx
             target: bun-darwin-arm64
             output: caymann-darwin-arm64
-          - artifact: caymann-darwin-x64-baseline
-            runner: macos-13
-            entry: apps/caymann/src/cli.tsx
-            target: bun-darwin-x64-baseline
-            output: caymann-darwin-x64-baseline
-          - artifact: caymann-darwin-x64-modern
-            runner: macos-13
-            entry: apps/caymann/src/cli.tsx
-            target: bun-darwin-x64-modern
-            output: caymann-darwin-x64-modern
           - artifact: caymann-windows-arm64
             runner: windows-2022
             entry: apps/caymann/src/cli.tsx
@@ -98,18 +78,28 @@ jobs:
           if [ "${{ matrix.entry }}" = "apps/maniac/src/cli.tsx" ]; then
             worker_entries="apps/maniac/src/workers/download.worker.ts ${worker_entries}"
           fi
-          bun build \
-            --compile \
-            --target=${{ matrix.target }} \
-            --format=esm \
-            --bytecode \
-            --minify \
-            --sourcemap \
-            --define BUILD_VERSION='"${{ github.ref_name }}"' \
-            --define BUILD_COMMIT='"${{ github.sha }}"' \
-            ${{ matrix.entry }} \
-            ${worker_entries} \
-            --outfile dist/${{ matrix.output }}
+          for attempt in 1 2 3; do
+            if bun build \
+              --compile \
+              --target=${{ matrix.target }} \
+              --format=esm \
+              --bytecode \
+              --minify \
+              --sourcemap \
+              --define BUILD_VERSION='"${{ github.ref_name }}"' \
+              --define BUILD_COMMIT='"${{ github.sha }}"' \
+              ${{ matrix.entry }} \
+              ${worker_entries} \
+              --outfile dist/${{ matrix.output }}; then
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "bun build failed after 3 attempts" >&2
+              exit 1
+            fi
+            echo "bun build failed (attempt $attempt/3), retrying..."
+            sleep 5
+          done
           if command -v sha256sum >/dev/null 2>&1; then
             sha256sum dist/${{ matrix.output }} > dist/${{ matrix.output }}.sha256
           else
