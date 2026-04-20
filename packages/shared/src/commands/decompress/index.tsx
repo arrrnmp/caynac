@@ -13,7 +13,7 @@ import { ErrorBox } from '../../components/ErrorBox.js';
 import { PasswordInput } from '../../components/PasswordInput.js';
 import { Divider } from '../../components/Divider.js';
 import { SelectList } from '../../components/SelectList.js';
-import { extractFiles, findArchiveParts } from '../../utils/compression.js';
+import { extractFiles, findArchiveParts } from '../../utils/compression-worker-api.js';
 
 type Step =
   | 'enter_archive'

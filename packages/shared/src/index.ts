@@ -54,10 +54,12 @@ export { DecompressCommand } from './commands/decompress/index.js';
 export { PicocryptDecryptCommand } from './commands/picocrypt-decrypt/index.js';
 export { OnboardingCommand } from './commands/onboarding/index.js';
 
-export { compressFiles, extractFiles, findArchiveParts } from './utils/compression.js';
+export { compressFiles, extractFiles, findArchiveParts } from './utils/compression-worker-api.js';
 export type { CompressionOptions, CompressionAlgo } from './utils/compression.js';
-export { runPicocrypt } from './utils/picocrypt.js';
+export { runPicocrypt } from './utils/picocrypt-worker-api.js';
 export type { PicocryptOptions } from './utils/picocrypt.js';
+export { runInWorker } from './utils/workers.js';
+export type { RunInWorkerOptions } from './utils/workers.js';
 
 export {
   checkDependencies,

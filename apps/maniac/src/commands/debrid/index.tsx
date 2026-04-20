@@ -14,7 +14,8 @@ import {
   type RDTorrentInfo,
   type RDUnrestricted,
 } from '../../utils/realDebrid.js';
-import { downloadFile, formatBytes, formatSpeed } from '../../utils/download.js';
+import { downloadFileViaWorker } from '../../utils/download-worker.js';
+import { formatBytes, formatSpeed } from '../../utils/download.js';
 import { readConfig, mergeConfig } from '../../utils/config.js';
 
 type Step =
@@ -206,7 +207,7 @@ export function DebridCommand({ initialToken, initialMagnet, initialOutputDir, t
         for (let i = 0; i < unrestricted.length; i++) {
           setCurrentDl(i);
           const u = unrestricted[i]!;
-          await downloadFile(u.download, outputDir, u.filename, (p) => {
+          await downloadFileViaWorker(u.download, outputDir, u.filename, (p) => {
             states[i] = {
               filename: u.filename,
               pct: p.percentage,

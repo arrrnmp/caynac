@@ -9,7 +9,7 @@ import { ErrorBox } from '../../components/ErrorBox.js';
 import { PasswordInput } from '../../components/PasswordInput.js';
 import { Divider } from '../../components/Divider.js';
 import { SelectList } from '../../components/SelectList.js';
-import { runPicocrypt } from '../../utils/picocrypt.js';
+import { runPicocrypt } from '../../utils/picocrypt-worker-api.js';
 import type { TransitionSnapshot, ColoredGlyph } from '../../transition.js';
 import type { Translations } from '../../i18n/index.js';
 
