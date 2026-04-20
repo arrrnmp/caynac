@@ -223,7 +223,7 @@ export function DebridCommand({ initialToken, initialMagnet, initialOutputDir, t
               total: p.totalBytes > 0 ? p.totalBytes : states[i]!.total,
             };
             flushDownloads();
-          }, u.filesize);
+          });
           flushDownloads(true);
         }
         mergeConfig({ defaultOutputDir: outputDir });
