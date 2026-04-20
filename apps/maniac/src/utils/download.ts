@@ -14,6 +14,7 @@ interface DownloadWorkerPayload {
   url: string;
   destDir: string;
   filename: string;
+  expectedBytes?: number;
 }
 
 interface DownloadWorkerProgressMessage {
@@ -54,6 +55,7 @@ export function downloadFile(
   destDir: string,
   filename: string,
   onProgress: (p: DownloadProgress) => void,
+  expectedBytes?: number,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const workerCandidates: Array<URL | string> = [
@@ -67,7 +69,7 @@ export function downloadFile(
 
     const startWorker = () => {
       worker = new Worker(workerCandidates[candidateIndex]!, {
-        workerData: { url, destDir, filename } as DownloadWorkerPayload,
+        workerData: { url, destDir, filename, expectedBytes } as DownloadWorkerPayload,
       });
       worker.on('message', handleMessage);
       worker.on('error', handleError);
